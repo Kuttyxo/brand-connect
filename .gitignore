@@ -1,0 +1,16 @@
+# Dependencias (No las subimos, se instalan en el servidor)
+node_modules/
+venv/
+__pycache__/
+
+# Variables de entorno y secretos (¡CRÍTICO PARA SEGURIDAD!)
+.env
+.env.local
+*.key
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
