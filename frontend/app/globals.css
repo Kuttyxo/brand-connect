@@ -1,34 +1,21 @@
 @import "tailwindcss";
 
 @theme {
-  /* Definimos tus colores de marca como variables de tema */
-  --color-brand-light: #F2F2F2;
-  --color-brand-dark: #2A2859;
-  --color-brand-orange: #F2994B;
+  /* Tu Paleta Original */
+  --color-brand-light: #F2F2F2;    /* Gris muy claro */
+  --color-brand-dark: #2A2859;     /* Azul oscuro (Ahora será el color del texto) */
+  --color-brand-orange: #F2994B;   /* Naranja Principal */
   --color-brand-accent1: #F2784B;
   --color-brand-accent2: #F25E5E;
 
-  /* Definimos el gradiente */
-  --image-brand-gradient: linear-gradient(to right, #F2994B, #F2784B, #F25E5E);
-  
-  /* Animaciones personalizadas */
-  --animate-fade-in-up: fadeInUp 0.8s ease-out forwards;
-  
-  @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
+  --image-brand-gradient: linear-gradient(to right, var(--color-brand-orange), var(--color-brand-accent1), var(--color-brand-accent2));
 }
 
-/* Estilos base */
+/* Estilos base CLAROS */
 body {
-  background-color: var(--color-brand-dark);
-  color: var(--color-brand-light);
+  /* Fondo gris muy suave (casi blanco) para que no canse la vista */
+  background-color: #FAFAFA; 
+  /* Texto principal en Azul Oscuro */
+  color: var(--color-brand-dark);
   font-family: system-ui, -apple-system, sans-serif;
 }
