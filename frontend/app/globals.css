@@ -1,20 +1,34 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+@theme {
+  /* Definimos tus colores de marca como variables de tema */
+  --color-brand-light: #F2F2F2;
+  --color-brand-dark: #2A2859;
+  --color-brand-orange: #F2994B;
+  --color-brand-accent1: #F2784B;
+  --color-brand-accent2: #F25E5E;
+
+  /* Definimos el gradiente */
+  --image-brand-gradient: linear-gradient(to right, #F2994B, #F2784B, #F25E5E);
+  
+  /* Animaciones personalizadas */
+  --animate-fade-in-up: fadeInUp 0.8s ease-out forwards;
+  
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
-/* Opcional: Estilo suave para el scroll */
-html {
-  scroll-behavior: smooth;
-}
-
+/* Estilos base */
 body {
-  color: rgb(var(--foreground-rgb));
-  background: #2A2859; /* Tu color de fondo base por seguridad */
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--color-brand-dark);
+  color: var(--color-brand-light);
+  font-family: system-ui, -apple-system, sans-serif;
 }
