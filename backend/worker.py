@@ -1,6 +1,7 @@
 import os
 import time
 import random
+import requests
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -8,11 +9,29 @@ from supabase import create_client, Client
 load_dotenv()
 url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
+webhook_url: str = os.environ.get("DISCORD_WEBHOOK_URL")
 
 # 2. Conectar a Supabase
 supabase: Client = create_client(url, key)
 
 print("🤖 BrandConnect Worker iniciado...")
+
+# Función para notificar en Discord
+def send_discord_alert(message):
+    if not webhook_url:
+        print("⚠️ No hay Discord Webhook configurado.")
+        return
+    
+    data = {
+        "content": message,
+        "username": "BrandConnect Bot"
+    }
+    try:
+        requests.post(webhook_url, json=data)
+    except Exception as e:
+        print(f"❌ Error enviando alerta: {e}")
+
+
 
 def mock_instagram_api(handle):
     """
@@ -68,6 +87,10 @@ def process_unverified_users():
             }
             
             supabase.table('profiles').update(data_to_update).eq('id', user_id).execute()
+            success_msg = f"🚀 **Nuevo Influencer Verificado!**\nUsuario: `{handle}`\nSeguidores: {social_data['followers']}\nEngagement: {social_data['engagement']}%"
+            send_discord_alert(success_msg)
+            print(f"   📢 Alerta enviada a Discord.")
+            
         else:
             print(f"   ❌ No se encontró cuenta para {handle}")
 
