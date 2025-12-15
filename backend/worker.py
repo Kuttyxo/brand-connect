@@ -73,5 +73,8 @@ def process_unverified_users():
 
 # --- Ejecución ---
 if __name__ == "__main__":
-    # Por ahora corre una vez. En la fase Docker lo haremos un loop infinito.
-    process_unverified_users()
+    # Bucle infinito: Esto convierte el script en un Servicio
+    while True:
+        process_unverified_users()
+        print("⏳ Esperando 60 segundos para la siguiente vuelta...")
+        time.sleep(60)
