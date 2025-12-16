@@ -1,10 +1,10 @@
-'use client'; // Necesario para pedir datos desde el navegador
+'use client';
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { Users, TrendingUp, DollarSign, Briefcase, Star, Activity } from 'lucide-react'; // Nuevos iconos
 
-// Definimos la forma de los datos para que TypeScript no se queje
 type Profile = {
   full_name: string;
   role: string;
@@ -22,15 +22,12 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. Obtener el usuario logueado actualmente
         const { data: { user } } = await supabase.auth.getUser();
-
         if (!user) {
-          router.push('/auth'); // Si no hay usuario, mandar al login
+          router.push('/auth?mode=login');
           return;
         }
 
-        // 2. Pedir los datos de SU perfil en la tabla pública
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -49,7 +46,7 @@ export default function DashboardPage() {
     fetchData();
   }, [router]);
 
-  // --- VISTA DE CARGA (SKELETON) ---
+  // --- SKELETON LOADING ---
   if (loading) {
     return (
       <div className="animate-pulse space-y-8">
@@ -63,103 +60,123 @@ export default function DashboardPage() {
     );
   }
 
+  const isBrand = profile?.role === 'brand';
+
   return (
     <div className="space-y-8 animate-fade-in">
       
-      {/* Encabezado Personalizado */}
+      {/* Encabezado Común */}
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-bold text-[var(--color-brand-dark)]">
-            Hola, <span className="text-[var(--color-brand-orange)] capitalize">{profile?.social_handle || 'Usuario'}</span> 👋
+            Hola, <span className="text-[var(--color-brand-orange)] capitalize">{profile?.full_name || 'Usuario'}</span> 👋
           </h1>
           <p className="text-gray-500 mt-2">
-            {profile?.role === 'brand' 
-              ? 'Gestiona tus campañas y encuentra talento.' 
-              : 'Aquí tienes el resumen de tu impacto en redes.'}
+            {isBrand 
+              ? 'Panel de Control para Marcas' 
+              : 'Panel de Control para Creadores'}
           </p>
         </div>
         
-        {/* Badge de Verificación */}
-        {profile?.is_verified && (
-          <div className="hidden md:flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-full text-sm font-bold">
-            ✅ Cuenta Verificada
-          </div>
-        )}
+        {/* Badge de Rol */}
+        <div className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${isBrand ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
+            {isBrand ? '🏢 Cuenta de Empresa' : '⚡ Cuenta de Creador'}
+        </div>
       </div>
 
-      {/* Tarjetas de Estadísticas REALES */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* Card 1: Seguidores */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-500 font-medium">Seguidores Totales</h3>
-            <span className="p-2 bg-blue-50 text-blue-600 rounded-lg">👥</span>
+      {/* --- CONTENIDO DINÁMICO SEGÚN ROL --- */}
+      
+      {isBrand ? (
+        // ================= VISTA DE MARCA =================
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          {/* Card 1: Campañas Activas */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-500 font-medium">Campañas Activas</h3>
+              <span className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Briefcase size={20}/></span>
+            </div>
+            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">0</p>
+            <span className="text-sm text-gray-400 font-medium">Crear nueva +</span>
           </div>
-          <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
-            {/* Formateamos el número (ej: 12500 -> 12,500) */}
-            {profile?.followers_count?.toLocaleString() || 0}
-          </p>
-          <span className="text-sm text-gray-400 font-medium">Actualizado auto.</span>
-        </div>
 
-        {/* Card 2: Engagement */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-500 font-medium">Engagement Rate</h3>
-            <span className="p-2 bg-orange-50 text-orange-600 rounded-lg">🔥</span>
+          {/* Card 2: Presupuesto Total */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-500 font-medium">Inversión Total</h3>
+              <span className="p-2 bg-green-50 text-green-600 rounded-lg"><DollarSign size={20}/></span>
+            </div>
+            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">$0</p>
+            <span className="text-sm text-gray-400 font-medium">Disponible</span>
           </div>
-          <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
-            {profile?.engagement_rate?.toFixed(2) || 0}%
-          </p>
-          <span className="text-sm text-gray-400 font-medium">
-            {profile?.engagement_rate && profile.engagement_rate > 3 
-              ? '🚀 Excelente rendimiento' 
-              : '📊 Sigue mejorando'}
-          </span>
-        </div>
 
-        {/* Card 3: Rol (Difiere según si es Marca o Influencer) */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-500 font-medium">
-              {profile?.role === 'brand' ? 'Presupuesto Activo' : 'Nivel de Cuenta'}
-            </h3>
-            <span className="p-2 bg-green-50 text-green-600 rounded-lg">
-              {profile?.role === 'brand' ? '💰' : '⭐'}
+          {/* Card 3: Candidatos */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-500 font-medium">Postulaciones</h3>
+              <span className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Users size={20}/></span>
+            </div>
+            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">0</p>
+            <span className="text-sm text-blue-500 font-medium cursor-pointer hover:underline">Ver candidatos →</span>
+          </div>
+        </div>
+      ) : (
+        // ================= VISTA DE INFLUENCER =================
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          {/* Card 1: Seguidores */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-500 font-medium">Seguidores</h3>
+              <span className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Users size={20}/></span>
+            </div>
+            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
+              {profile?.followers_count?.toLocaleString() || 0}
+            </p>
+            <span className="text-sm text-gray-400 font-medium">@{profile?.social_handle}</span>
+          </div>
+
+          {/* Card 2: Engagement */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-500 font-medium">Engagement</h3>
+              <span className="p-2 bg-orange-50 text-orange-600 rounded-lg"><Activity size={20}/></span>
+            </div>
+            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
+              {profile?.engagement_rate?.toFixed(2) || 0}%
+            </p>
+            <span className="text-sm text-gray-400 font-medium">
+              {profile?.engagement_rate && profile.engagement_rate > 3 ? '🚀 Bueno' : '📊 Normal'}
             </span>
           </div>
-          <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
-             {profile?.role === 'brand' ? '$0' : 'Starter'}
-          </p>
-          <span className="text-sm text-blue-500 font-medium cursor-pointer hover:underline">Ver detalles →</span>
-        </div>
-      </div>
 
-      {/* Estado del Bot de Python */}
-      {!profile?.is_verified && profile?.role === 'influencer' && (
-         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
-           <div className="text-3xl">🤖</div>
-           <div>
-             <h3 className="font-bold text-yellow-800">Verificando tu cuenta...</h3>
-             <p className="text-yellow-700 text-sm mt-1">
-               Nuestro sistema está analizando tu perfil <strong>{profile?.social_handle}</strong> para calcular tus métricas reales. Esto puede tardar unos minutos.
-             </p>
-           </div>
-         </div>
+          {/* Card 3: Nivel */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-500 font-medium">Nivel</h3>
+              <span className="p-2 bg-yellow-50 text-yellow-600 rounded-lg"><Star size={20}/></span>
+            </div>
+            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">Starter</p>
+            <span className="text-sm text-blue-500 font-medium cursor-pointer hover:underline">Ver beneficios →</span>
+          </div>
+        </div>
       )}
 
-      {/* Sección Secundaria */}
+      {/* --- SECCIÓN INFERIOR (Call to Action) --- */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center py-20">
         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
-          🚀
+          {isBrand ? '📢' : '🚀'}
         </div>
-        <h3 className="text-xl font-bold text-[var(--color-brand-dark)]">¡Estás listo para despegar!</h3>
+        <h3 className="text-xl font-bold text-[var(--color-brand-dark)]">
+          {isBrand ? 'Publica tu primera campaña' : '¡Estás listo para despegar!'}
+        </h3>
         <p className="text-gray-500 max-w-md mx-auto mt-2">
-          Aún no tienes campañas activas. Completa tu perfil para que las marcas te encuentren.
+          {isBrand 
+            ? 'Encuentra a los mejores micro-influencers para tu marca hoy mismo.'
+            : 'Completa tu perfil para que las marcas te encuentren más rápido.'}
         </p>
         <button className="mt-6 px-6 py-3 bg-[var(--color-brand-dark)] text-white rounded-xl font-bold hover:bg-[var(--color-brand-orange)] transition-colors">
-          Completar Perfil
+          {isBrand ? 'Crear Campaña' : 'Completar Perfil'}
         </button>
       </div>
 
