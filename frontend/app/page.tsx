@@ -26,7 +26,7 @@ export default function Home() {
         </div>
         
         {/* Botón de Login discreto */}
-        <Link href="/auth" className="hidden md:block text-sm font-semibold text-[var(--color-brand-dark)] hover:text-[var(--color-brand-orange)] transition-colors">
+        <Link href="/auth" className="text-sm font-semibold text-[var(--color-brand-dark)] hover:text-[var(--color-brand-orange)] transition-colors">
           Iniciar Sesión
         </Link>
       </header>
