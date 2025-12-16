@@ -16,7 +16,7 @@ export default function Home() {
         <div className="flex items-center gap-2">
           {/* Logo Original - Al ser JPG con fondo blanco/gris, se integrará mejor aquí */}
           <Image 
-            src="/logo.png" 
+            src="/logo-real.png" 
             alt="BrandConnect Logo"
             width={180} 
             height={100} 
