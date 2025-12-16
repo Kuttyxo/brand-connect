@@ -32,7 +32,7 @@ function AuthForm() {
             full_name: email.split('@')[0],
             // Enviamos el usuario de Instagram (o vacío si es marca)
             username: role === 'influencer' 
-            ? (socialHandle.startsWith('@') ? socialHandle : '@${socialHandle}') 
+            ? (socialHandle.startsWith('@') ? socialHandle : `@${socialHandle}`)
             : null
           }
         }
