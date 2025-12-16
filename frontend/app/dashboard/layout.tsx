@@ -1,19 +1,34 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image'; // <--- IMPORTANTE: Agregamos esto
-import { LayoutDashboard, Users, ShoppingBag, Settings, LogOut } from 'lucide-react';
+import Image from 'next/image';
+import { LayoutDashboard, Users, ShoppingBag, Settings, LogOut, Menu, X } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/');
+    router.refresh();
+  };
+
+  const closeMenu = () => setIsMobileMenuOpen(false);
+
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       
-      {/* --- SIDEBAR (Menú Lateral) --- */}
-      <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col">
-        
-        {/* Logo del Dashboard (CAMBIADO) */}
+      {/* --- SIDEBAR DESKTOP --- */}
+      <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col z-10">
+        {/* Logo */}
         <div className="p-6 border-b border-gray-100 flex items-center justify-start">
           <Link href="/dashboard">
             <Image 
@@ -22,57 +37,105 @@ export default function DashboardLayout({
               width={160} 
               height={40} 
               priority
-              className="h-10 w-auto object-contain" // Esto asegura que no se deforme
+              className="h-8 w-auto object-contain"
             />
           </Link>
         </div>
 
-        {/* Menú de Navegación */}
+        {/* Navegación Desktop */}
         <nav className="flex-1 p-4 space-y-2">
           <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-[var(--color-brand-dark)] bg-gray-100 rounded-xl font-medium transition-colors">
             <LayoutDashboard size={20} />
             Inicio
           </Link>
-          
           <Link href="/dashboard/campaigns" className="flex items-center gap-3 px-4 py-3 text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)] rounded-xl font-medium transition-colors">
             <ShoppingBag size={20} />
             Campañas
           </Link>
-
           <Link href="/dashboard/profile" className="flex items-center gap-3 px-4 py-3 text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)] rounded-xl font-medium transition-colors">
             <Users size={20} />
             Mi Perfil
           </Link>
-
           <Link href="/dashboard/settings" className="flex items-center gap-3 px-4 py-3 text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)] rounded-xl font-medium transition-colors">
             <Settings size={20} />
             Configuración
           </Link>
         </nav>
 
-        {/* Botón de Salir */}
+        {/* Botón Salir Desktop */}
         <div className="p-4 border-t border-gray-100">
-          <Link href="/" className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition-colors">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition-colors text-left">
             <LogOut size={20} />
             Cerrar Sesión
-          </Link>
+          </button>
         </div>
       </aside>
 
-      {/* --- MAIN CONTENT --- */}
-      <main className="flex-1 overflow-y-auto">
-        <header className="bg-white border-b border-gray-200 h-16 flex items-center px-8 justify-between md:hidden">
-           {/* Header móvil: También ponemos el logo aquí para consistencia */}
-           <Image 
-              src="/logo-full.png" 
-              alt="BrandConnect" 
-              width={120} 
-              height={30} 
-              className="h-6 w-auto object-contain"
-            />
-        </header>
+
+      {/* --- CONTENIDO PRINCIPAL + HEADER MÓVIL --- */}
+      <main className="flex-1 flex flex-col relative overflow-y-auto">
         
-        <div className="p-8">
+        {/* HEADER MÓVIL (Sticky top) */}
+        <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 md:hidden sticky top-0 z-50 relative">
+           <Link href="/dashboard" onClick={closeMenu}>
+             <Image 
+                src="/brand-logo.png" 
+                alt="BrandConnect" 
+                width={120} 
+                height={30} 
+                className="h-6 w-auto object-contain"
+              />
+           </Link>
+
+           <button 
+             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+             className="text-[var(--color-brand-dark)] p-2 hover:bg-gray-100 rounded-lg transition-colors z-50 relative"
+             aria-label="Toggle Menu"
+           >
+             {/* Transición suave entre iconos */}
+             <div className="relative w-6 h-6">
+                <Menu size={24} className={`absolute transition-all duration-300 ${isMobileMenuOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'}`} />
+                <X size={24} className={`absolute transition-all duration-300 ${isMobileMenuOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-50'}`} />
+             </div>
+           </button>
+        </header>
+
+        {/* --- MENÚ DESPLEGABLE MÓVIL CON TRANSICIÓN --- */}
+        {/* Usamos clases dinámicas para la transición de altura y opacidad */}
+        <div 
+          className={`md:hidden absolute top-16 left-0 w-full z-40 bg-white shadow-xl overflow-hidden transition-all duration-300 ease-in-out
+            ${isMobileMenuOpen ? 'max-h-[calc(100vh-4rem)] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}
+          `}
+        >
+          <nav className="flex flex-col p-4 space-y-2 border-b border-gray-200">
+            <Link onClick={closeMenu} href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-[var(--color-brand-dark)] bg-gray-50 rounded-xl font-medium">
+              <LayoutDashboard size={20} />
+              Inicio
+            </Link>
+            <Link onClick={closeMenu} href="/dashboard/campaigns" className="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-xl font-medium">
+              <ShoppingBag size={20} />
+              Campañas
+            </Link>
+            <Link onClick={closeMenu} href="/dashboard/profile" className="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-xl font-medium">
+              <Users size={20} />
+              Mi Perfil
+            </Link>
+            <Link onClick={closeMenu} href="/dashboard/settings" className="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-xl font-medium">
+              <Settings size={20} />
+              Configuración
+            </Link>
+            
+            <div className="h-px bg-gray-100 my-2"></div>
+            
+            <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium w-full text-left">
+              <LogOut size={20} />
+              Cerrar Sesión
+            </button>
+          </nav>
+        </div>
+        
+        {/* Contenido de la página */}
+        <div className="p-4 md:p-8 flex-1 overflow-y-auto">
           {children}
         </div>
       </main>
