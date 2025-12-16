@@ -21,7 +21,7 @@ export default function Home() {
             width={180} 
             height={100} 
             priority 
-            className="w-40 md:w-30 h-30 object-contain mix-blend-multiply" // mix-blend ayuda a que el fondo del jpg se funda un poco
+            className="w-30 md:w-30 h-30 object-contain mix-blend-multiply" // mix-blend ayuda a que el fondo del jpg se funda un poco
           />
         </div>
         
