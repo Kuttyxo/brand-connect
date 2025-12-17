@@ -133,7 +133,7 @@ export default function DashboardPage() {
             <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
               {profile?.followers_count?.toLocaleString() || 0}
             </p>
-            <span className="text-sm text-gray-400 font-medium">@{profile?.social_handle}</span>
+            <span className="text-sm text-gray-400 font-medium">{profile?.social_handle}</span>
           </div>
 
           {/* Card 2: Engagement */}
