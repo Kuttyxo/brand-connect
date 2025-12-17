@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Users, TrendingUp, DollarSign, Briefcase, Star, Activity, LoaderCircle } from 'lucide-react'; 
+import { Users, TrendingUp, DollarSign, Briefcase, Star, Activity, LoaderCircle, Link } from 'lucide-react'; 
 
 type Profile = {
   full_name: string;
@@ -163,7 +163,9 @@ export default function DashboardPage() {
               <span className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Briefcase size={20}/></span>
             </div>
             <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">0</p>
-            <span className="text-sm text-gray-400 font-medium">Crear nueva +</span>
+            <Link href="/create-campaign" className="text-sm text-[var(--color-brand-orange)] font-bold cursor-pointer hover:underline">
+            Crear nueva +
+            </Link>
           </div>
 
           {/* Card 2: Presupuesto Total */}
