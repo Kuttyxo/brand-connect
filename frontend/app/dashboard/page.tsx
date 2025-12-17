@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Users, TrendingUp, DollarSign, Briefcase, Star, Activity } from 'lucide-react'; // Nuevos iconos
+import { Users, TrendingUp, DollarSign, Briefcase, Star, Activity, LoaderCircle } from 'lucide-react'; 
 
 type Profile = {
   full_name: string;
@@ -20,7 +20,9 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const fetchData = async () => {
+    let channel: any;
+
+    const fetchDataAndSubscribe = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
@@ -28,6 +30,7 @@ export default function DashboardPage() {
           return;
         }
 
+        // 1. Carga Inicial
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -36,6 +39,35 @@ export default function DashboardPage() {
 
         if (error) throw error;
         setProfile(data);
+
+        // 2. SUSCRIPCIÓN (MODO DEBUG)
+        console.log("🔌 Intentando conectar a Realtime...");
+        
+        channel = supabase
+          .channel('public:profiles') // Canal público
+          .on(
+            'postgres_changes',
+            { 
+              event: 'UPDATE', 
+              schema: 'public', 
+              table: 'profiles',
+              // filter: `id=eq.${user.id}` // <--- LO COMENTÉ TEMPORALMENTE PARA PROBAR
+            },
+            (payload) => {
+              console.log('📨 ¡CAMBIO RECIBIDO!', payload);
+              
+              // Verificamos si el cambio es para MI usuario antes de actualizar
+              if (payload.new.id === user.id) {
+                 console.log("✅ Es mi usuario, actualizando estado...");
+                 setProfile(payload.new as Profile);
+              }
+            }
+          )
+          .subscribe((status) => {
+            // ESTO ES LO IMPORTANTE: Mira la consola (F12) para ver este mensaje
+            console.log("📡 Estado de la conexión:", status);
+          });
+
       } catch (error) {
         console.error('Error cargando perfil:', error);
       } finally {
@@ -43,9 +75,19 @@ export default function DashboardPage() {
       }
     };
 
-    fetchData();
+    fetchDataAndSubscribe();
+
+    return () => {
+      if (channel) {
+          console.log("🔌 Desconectando...");
+          supabase.removeChannel(channel);
+      }
+    };
   }, [router]);
 
+  // ... EL RESTO DEL CÓDIGO (HTML) SIGUE EXACTAMENTE IGUAL ...
+  // (Pégalo aquí abajo tal cual lo tenías)
+  
   // --- SKELETON LOADING ---
   if (loading) {
     return (
@@ -123,6 +165,21 @@ export default function DashboardPage() {
       ) : (
         // ================= VISTA DE INFLUENCER =================
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+          {!profile?.is_verified && (
+            <div className="col-span-1 md:col-span-3 bg-yellow-50 border border-yellow-200 rounded-xl p-6 flex flex-col md:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-2">
+               <div className="p-3 bg-yellow-100 rounded-full text-yellow-600">
+                 <LoaderCircle size={32} className="animate-spin" /> {/* Icono girando */}
+               </div>
+               <div>
+                 <h3 className="font-bold text-lg text-yellow-800">Analizando tu perfil...</h3>
+                 <p className="text-yellow-700 text-sm mt-1">
+                   Nuestro robot está escaneando <strong>{profile?.social_handle}</strong> para obtener tus métricas reales. 
+                   El dashboard se completará automáticamente en unos segundos.
+                 </p>
+               </div>
+            </div>
+          )}
           
           {/* Card 1: Seguidores */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
