@@ -1,5 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
+import SplitText from "@/components/SplitText";
+import TextType from "@/components/TextType";
 
 export default function Home() {
   return (
@@ -36,18 +38,60 @@ export default function Home() {
         
 
         {/* Título */}
-        <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight text-[var(--color-brand-dark)] mb-6 max-w-4xl leading-[1.1]">
-          El Marketplace de <br className="hidden md:block" />
-          <span className="bg-clip-text text-transparent bg-[image:var(--image-brand-gradient)]">
-            Micro-Influencers
-          </span>
+<h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight mb-6 max-w-4xl leading-[1.1]">
+          
+          {/* Parte 1: Texto Normal (Color Dark) */}
+          <SplitText 
+            text="El Marketplace de" 
+            className="text-[var(--color-brand-dark)]"
+            delay={50} 
+            animationFrom={{ opacity: 0, y: 30 }} 
+            animationTo={{ opacity: 1, y: 0 }}
+          />
+          
+          <br className="hidden md:block" />
+          
+          {/* Parte 2: Texto Gradiente (Micro-Influencers) */}
+          {/* Pasamos tus clases de gradiente directamente al componente */}
+          <SplitText 
+            text="Micro-Influencers" 
+            className="bg-clip-text text-transparent bg-[image:var(--image-brand-gradient)]"
+            delay={150} // Un pequeño retraso para que salga después de la primera línea
+            split={false} // Modo bloque para que el gradiente se aplique correctamente
+            animationFrom={{ opacity: 0, y: 30 }} 
+            animationTo={{ opacity: 1, y: 0 }}
+          />
+
         </h1>
         
         {/* Subtítulo */}
-        <p className="mt-4 text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-          Conectamos marcas con creadores reales. 
-          <span className="font-semibold text-[var(--color-brand-dark)]"> Sin agencias costosas, sin contratos complicados.</span>
-          <br/> Empieza tu campaña hoy mismo.
+<p className="mt-4 text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed h-[80px] sm:h-auto"> 
+        {/* Nota: h-[80px] evita el salto de layout mientras escribe en móviles */}
+          
+          {/* Parte 1: Texto Normal */}
+          <TextType 
+            text="Conectamos marcas con creadores reales. "
+            delay={1000} // Empieza 1s después de cargar la página
+            speed={20}
+          />
+
+          {/* Parte 2: Texto Negrita (Empieza cuando acaba el anterior aprox) */}
+          <span className="font-semibold text-[var(--color-brand-dark)]">
+            <TextType 
+              text="Sin agencias costosas, sin contratos complicados."
+              delay={1800} // Calculado: 1000 + (longitud texto 1 * speed)
+              speed={30}
+            />
+          </span>
+
+          <br className="hidden sm:block" />
+
+          {/* Parte 3: Segunda línea */}
+          <TextType 
+             text="Empieza tu campaña hoy mismo."
+             delay={2900} // Calculado: 2600 + (longitud texto 2 * speed)
+             speed={30}
+          />
         </p>
 
         {/* Botones */}
