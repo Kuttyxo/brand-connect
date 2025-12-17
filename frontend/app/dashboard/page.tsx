@@ -3,7 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Users, TrendingUp, DollarSign, Briefcase, Star, Activity, LoaderCircle, Link } from 'lucide-react'; 
+
+import Link from 'next/link';
+
+import { Users, TrendingUp, DollarSign, Briefcase, Star, Activity, LoaderCircle} from 'lucide-react'; 
 
 type Profile = {
   full_name: string;
