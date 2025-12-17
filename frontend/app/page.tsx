@@ -65,7 +65,7 @@ export default function Home() {
         </h1>
         
         {/* Subtítulo */}
-<p className="mt-4 text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed h-[80px] sm:h-auto"> 
+<p className="mt-8 text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed sm:h-auto"> 
         {/* Nota: h-[80px] evita el salto de layout mientras escribe en móviles */}
           
           {/* Parte 1: Texto Normal */}
