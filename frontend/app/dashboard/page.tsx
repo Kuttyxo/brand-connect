@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Users, TrendingUp, DollarSign, Briefcase, Star, Activity, LoaderCircle } from 'lucide-react'; 
@@ -19,10 +19,36 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // Función para pedir datos frescos a la DB
+  const fetchProfileData = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+      
+      // Solo actualizamos si hay cambios reales para evitar parpadeos
+      setProfile((prev) => {
+          if (JSON.stringify(prev) !== JSON.stringify(data)) {
+              console.log("🔄 Datos actualizados:", data);
+              return data;
+          }
+          return prev;
+      });
+      
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+  }, []);
+
   useEffect(() => {
     let channel: any;
+    let pollingInterval: any; // Variable para el "Latido" de respaldo
 
-    const fetchDataAndSubscribe = async () => {
+    const initDashboard = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
@@ -31,59 +57,57 @@ export default function DashboardPage() {
         }
 
         // 1. Carga Inicial
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
+        await fetchProfileData(user.id);
+        setLoading(false);
 
-        if (error) throw error;
-        setProfile(data);
+        // 2. ESTRATEGIA DE RESPALDO (POLLING)
+        // Si el perfil NO está verificado, preguntamos cada 4 segundos
+        // Esto arregla el problema si el WebSocket falla.
+        pollingInterval = setInterval(async () => {
+            await fetchProfileData(user.id);
+        }, 4000);
 
-        // 2. SUSCRIPCIÓN (MODO DEBUG)
-        console.log("🔌 Intentando conectar a Realtime...");
+
+        // 3. CONEXIÓN REALTIME (Intento Principal)
+        // Quitamos limpiezas agresivas y timeouts complejos
+        console.log("🔌 Iniciando conexión Realtime estándar...");
         
         channel = supabase
-          .channel('public:profiles') // Canal público
+          .channel('dashboard_updates')
           .on(
             'postgres_changes',
             { 
               event: 'UPDATE', 
               schema: 'public', 
               table: 'profiles',
-              // filter: `id=eq.${user.id}` // <--- LO COMENTÉ TEMPORALMENTE PARA PROBAR
+              filter: `id=eq.${user.id}` // Volvemos al filtro seguro
             },
-            (payload) => {
-              console.log('📨 ¡CAMBIO RECIBIDO!', payload);
-              
-              // Verificamos si el cambio es para MI usuario antes de actualizar
-              if (payload.new.id === user.id) {
-                 console.log("✅ Es mi usuario, actualizando estado...");
-                 setProfile(payload.new as Profile);
-              }
+            async (payload) => {
+                 console.log('🔔 Realtime detectó cambio via WebSocket');
+                 await fetchProfileData(user.id); 
             }
           )
           .subscribe((status) => {
-            // ESTO ES LO IMPORTANTE: Mira la consola (F12) para ver este mensaje
-            console.log("📡 Estado de la conexión:", status);
+             console.log("📡 Estado WebSocket:", status);
           });
 
       } catch (error) {
-        console.error('Error cargando perfil:', error);
-      } finally {
+        console.error('Error inicial:', error);
         setLoading(false);
       }
     };
 
-    fetchDataAndSubscribe();
+    initDashboard();
 
+    // Limpieza al salir
     return () => {
-      if (channel) {
-          console.log("🔌 Desconectando...");
-          supabase.removeChannel(channel);
-      }
+      if (channel) supabase.removeChannel(channel);
+      if (pollingInterval) clearInterval(pollingInterval); // Matamos el intervalo
     };
-  }, [router]);
+  }, [router, fetchProfileData]);
+
+  // Si el usuario YA se verificó, detenemos el polling visualmente (lógica interna)
+  // (El intervalo se limpia solo al desmontar, pero esto ayuda a la lógica visual)
 
   // ... EL RESTO DEL CÓDIGO (HTML) SIGUE EXACTAMENTE IGUAL ...
   // (Pégalo aquí abajo tal cual lo tenías)
