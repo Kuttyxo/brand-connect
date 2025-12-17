@@ -151,7 +151,7 @@ function AuthForm() {
             type="email"
             required
             className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-[var(--color-brand-orange)] focus:ring-2 focus:ring-[var(--color-brand-orange)]/20 outline-none transition-all text-gray-900"
-            placeholder="contacto@influencer.com"
+            placeholder="contacto@mail.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
