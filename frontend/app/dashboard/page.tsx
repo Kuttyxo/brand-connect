@@ -4,9 +4,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
-import Link from 'next/link';
-
-import { Users, TrendingUp, DollarSign, Briefcase, Star, Activity, LoaderCircle} from 'lucide-react'; 
+// Imports correctos para evitar conflictos
+import Link from 'next/link'; 
+import { Users, DollarSign, Briefcase, Star, Activity, LoaderCircle } from 'lucide-react'; 
 
 type Profile = {
   full_name: string;
@@ -19,37 +19,65 @@ type Profile = {
 
 export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  
+  // Nuevo estado para las estadísticas de la marca
+  const [stats, setStats] = useState({
+    activeCampaigns: 0,
+    totalBudget: 0,
+    candidates: 0
+  });
+
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Función para pedir datos frescos a la DB
-  const fetchProfileData = useCallback(async (userId: string) => {
+  // Función MAESTRA para pedir todos los datos (Perfil + Estadísticas)
+  const fetchDashboardData = useCallback(async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      // 1. Obtener Perfil
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
+      if (profileError) throw profileError;
       
-      // Solo actualizamos si hay cambios reales para evitar parpadeos
+      // Actualizamos perfil si cambió
       setProfile((prev) => {
-          if (JSON.stringify(prev) !== JSON.stringify(data)) {
-              console.log("🔄 Datos actualizados:", data);
-              return data;
+          if (JSON.stringify(prev) !== JSON.stringify(profileData)) {
+              return profileData;
           }
           return prev;
       });
-      
+
+      // 2. Si es MARCA, calculamos sus estadísticas reales
+      if (profileData.role === 'brand') {
+          const { data: campaigns, error: campaignsError } = await supabase
+            .from('campaigns')
+            .select('budget, status') // Solo traemos lo necesario para sumar
+            .eq('brand_id', userId);
+
+          if (!campaignsError && campaigns) {
+              const active = campaigns.filter(c => c.status === 'open').length;
+              const total = campaigns.reduce((sum, c) => sum + (c.budget || 0), 0);
+              
+              setStats({
+                  activeCampaigns: active,
+                  totalBudget: total,
+                  candidates: 0 // (Pendiente: conectar con tabla applications)
+              });
+          }
+      }
+
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error actualizando dashboard:', error);
     }
   }, []);
 
   useEffect(() => {
-    let channel: any;
-    let pollingInterval: any; // Variable para el "Latido" de respaldo
+    let channelProfiles: any;
+    let channelCampaigns: any;
+    let pollingInterval: any; 
 
     const initDashboard = async () => {
       try {
@@ -60,39 +88,37 @@ export default function DashboardPage() {
         }
 
         // 1. Carga Inicial
-        await fetchProfileData(user.id);
+        await fetchDashboardData(user.id);
         setLoading(false);
 
-        // 2. ESTRATEGIA DE RESPALDO (POLLING)
-        // Si el perfil NO está verificado, preguntamos cada 4 segundos
-        // Esto arregla el problema si el WebSocket falla.
+        // 2. RESPALDO (Polling cada 4s)
         pollingInterval = setInterval(async () => {
-            await fetchProfileData(user.id);
+            await fetchDashboardData(user.id);
         }, 4000);
 
-
-        // 3. CONEXIÓN REALTIME (Intento Principal)
-        // Quitamos limpiezas agresivas y timeouts complejos
-        console.log("🔌 Iniciando conexión Realtime estándar...");
+        // 3. REALTIME: Escuchamos cambios en PERFIL
+        console.log("🔌 Conectando Realtime...");
         
-        channel = supabase
-          .channel('dashboard_updates')
-          .on(
-            'postgres_changes',
-            { 
-              event: 'UPDATE', 
-              schema: 'public', 
-              table: 'profiles',
-              filter: `id=eq.${user.id}` // Volvemos al filtro seguro
-            },
-            async (payload) => {
-                 console.log('🔔 Realtime detectó cambio via WebSocket');
-                 await fetchProfileData(user.id); 
+        channelProfiles = supabase
+          .channel('dashboard_profiles')
+          .on('postgres_changes', 
+            { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+            () => fetchDashboardData(user.id)
+          )
+          .subscribe();
+
+        // 4. REALTIME: Escuchamos cambios en CAMPAÑAS (Nuevo)
+        // Así el contador sube apenas creas una campaña
+        channelCampaigns = supabase
+          .channel('dashboard_campaigns')
+          .on('postgres_changes', 
+            { event: '*', schema: 'public', table: 'campaigns', filter: `brand_id=eq.${user.id}` },
+            () => {
+                console.log("🔔 Cambio en campañas detectado!");
+                fetchDashboardData(user.id);
             }
           )
-          .subscribe((status) => {
-             console.log("📡 Estado WebSocket:", status);
-          });
+          .subscribe();
 
       } catch (error) {
         console.error('Error inicial:', error);
@@ -102,18 +128,12 @@ export default function DashboardPage() {
 
     initDashboard();
 
-    // Limpieza al salir
     return () => {
-      if (channel) supabase.removeChannel(channel);
-      if (pollingInterval) clearInterval(pollingInterval); // Matamos el intervalo
+      if (channelProfiles) supabase.removeChannel(channelProfiles);
+      if (channelCampaigns) supabase.removeChannel(channelCampaigns);
+      if (pollingInterval) clearInterval(pollingInterval);
     };
-  }, [router, fetchProfileData]);
-
-  // Si el usuario YA se verificó, detenemos el polling visualmente (lógica interna)
-  // (El intervalo se limpia solo al desmontar, pero esto ayuda a la lógica visual)
-
-  // ... EL RESTO DEL CÓDIGO (HTML) SIGUE EXACTAMENTE IGUAL ...
-  // (Pégalo aquí abajo tal cual lo tenías)
+  }, [router, fetchDashboardData]);
   
   // --- SKELETON LOADING ---
   if (loading) {
@@ -131,6 +151,11 @@ export default function DashboardPage() {
 
   const isBrand = profile?.role === 'brand';
 
+  // Formateador de dinero (CLP)
+  const formatMoney = (amount: number) => {
+    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       
@@ -147,70 +172,82 @@ export default function DashboardPage() {
           </p>
         </div>
         
-        {/* Badge de Rol */}
         <div className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${isBrand ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
             {isBrand ? '🏢 Cuenta de Empresa' : '⚡ Cuenta de Creador'}
         </div>
       </div>
 
-      {/* --- CONTENIDO DINÁMICO SEGÚN ROL --- */}
+      {/* --- CONTENIDO DINÁMICO --- */}
       
       {isBrand ? (
-        // ================= VISTA DE MARCA =================
+        // VISTA MARCA
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* Card 1: Campañas Activas */}
+          {/* Card 1: Campañas Activas (AHORA REAL) */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-gray-500 font-medium">Campañas Activas</h3>
               <span className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Briefcase size={20}/></span>
             </div>
-            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">0</p>
+            
+            {/* Número Dinámico */}
+            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
+                {stats.activeCampaigns}
+            </p>
+            
             <Link href="/create-campaign" className="text-sm text-[var(--color-brand-orange)] font-bold cursor-pointer hover:underline">
-            Crear nueva +
+              Crear nueva +
             </Link>
+
           </div>
 
-          {/* Card 2: Presupuesto Total */}
+          {/* Card 2: Presupuesto Total (AHORA REAL) */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-gray-500 font-medium">Inversión Total</h3>
               <span className="p-2 bg-green-50 text-green-600 rounded-lg"><DollarSign size={20}/></span>
             </div>
-            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">$0</p>
-            <span className="text-sm text-gray-400 font-medium">Disponible</span>
+            
+            {/* Dinero Dinámico */}
+            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
+                {formatMoney(stats.totalBudget)}
+            </p>
+            
+            <span className="text-sm text-gray-400 font-medium">Comprometido</span>
           </div>
 
-          {/* Card 3: Candidatos */}
+          {/* Card 3: Postulaciones (Aún en 0 hasta que hagamos el marketplace) */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-gray-500 font-medium">Postulaciones</h3>
               <span className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Users size={20}/></span>
             </div>
-            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">0</p>
+            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
+                {stats.candidates}
+            </p>
             <span className="text-sm text-blue-500 font-medium cursor-pointer hover:underline">Ver candidatos →</span>
           </div>
         </div>
       ) : (
-        // ================= VISTA DE INFLUENCER =================
+        // VISTA INFLUENCER
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           {!profile?.is_verified && (
             <div className="col-span-1 md:col-span-3 bg-yellow-50 border border-yellow-200 rounded-xl p-6 flex flex-col md:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-2">
                <div className="p-3 bg-yellow-100 rounded-full text-yellow-600">
-                 <LoaderCircle size={32} className="animate-spin" /> {/* Icono girando */}
+                 <LoaderCircle size={32} className="animate-spin" />
                </div>
                <div>
                  <h3 className="font-bold text-lg text-yellow-800">Analizando tu perfil...</h3>
                  <p className="text-yellow-700 text-sm mt-1">
-                   Nuestro robot está escaneando <strong>{profile?.social_handle}</strong> para obtener tus métricas reales. 
-                   El dashboard se completará automáticamente en unos segundos.
+                   Nuestro robot está escaneando <strong>{profile?.social_handle}</strong>.
+                   <br/>
+                   Esto puede tardar unos segundos. La página se actualizará sola.
                  </p>
                </div>
             </div>
           )}
           
-          {/* Card 1: Seguidores */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-gray-500 font-medium">Seguidores</h3>
@@ -222,7 +259,6 @@ export default function DashboardPage() {
             <span className="text-sm text-gray-400 font-medium">{profile?.social_handle}</span>
           </div>
 
-          {/* Card 2: Engagement */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-gray-500 font-medium">Engagement</h3>
@@ -236,7 +272,6 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          {/* Card 3: Nivel */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-gray-500 font-medium">Nivel</h3>
@@ -248,7 +283,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* --- SECCIÓN INFERIOR (Call to Action) --- */}
+      {/* Footer */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center py-20">
         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
           {isBrand ? '📢' : '🚀'}
