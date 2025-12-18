@@ -3,20 +3,50 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, DollarSign, FileText, Target, Send, Loader2, Sparkles, LayoutTemplate } from 'lucide-react';
+import { ArrowLeft, DollarSign, FileText, Target, Send, Loader2, Sparkles, LayoutTemplate, Hash } from 'lucide-react';
 import Link from 'next/link';
+
+// Lista de Categorías Disponibles
+const CATEGORIES = [
+  "Moda", 
+  "Fitness", 
+  "Humor", 
+  "Comida", 
+  "Viajes", 
+  "Tecnología", 
+  "Lifestyle", 
+  "Perfumería", 
+  "Gaming", 
+  "Educación"
+];
 
 export default function CreateCampaignPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null); // Para efectos visuales
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     requirements: '',
     budget: '',
+    categories: [] as string[], // Nuevo campo array
   });
+
+  // Función para manejar la selección múltiple de categorías
+  const toggleCategory = (category: string) => {
+    setFormData(prev => {
+      const exists = prev.categories.includes(category);
+      if (exists) {
+        // Si ya está, la quitamos
+        return { ...prev, categories: prev.categories.filter(c => c !== category) };
+      } else {
+        // Si no está, la agregamos
+        return { ...prev, categories: [...prev.categories, category] };
+      }
+    });
+    setFocusedField('categories'); // Activamos el tip visual
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +64,7 @@ export default function CreateCampaignPage() {
           description: formData.description,
           requirements: formData.requirements,
           budget: Number(formData.budget),
+          categories: formData.categories, // Enviamos las categorías
           status: 'open',
         });
 
@@ -51,7 +82,7 @@ export default function CreateCampaignPage() {
   return (
     <div className="min-h-screen bg-slate-50 relative overflow-hidden selection:bg-[var(--color-brand-orange)] selection:text-white">
       
-      {/* --- Fondo Decorativo (Igual que el Home) --- */}
+      {/* --- Fondo Decorativo --- */}
       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[var(--color-brand-orange)]/5 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-900/5 rounded-full blur-[100px] pointer-events-none"></div>
 
@@ -79,10 +110,7 @@ export default function CreateCampaignPage() {
             
             {/* --- COLUMNA IZQUIERDA: Panel Visual --- */}
             <div className="lg:col-span-2 bg-[var(--color-brand-dark)] p-8 text-white relative flex flex-col justify-between overflow-hidden">
-                {/* Patrón de fondo sutil */}
                 <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ffffff33_1px,transparent_1px)] [background-size:16px_16px]"></div>
-                
-                {/* Orbe decorativo animado */}
                 <div className="absolute -right-10 -top-10 w-40 h-40 bg-[var(--color-brand-orange)] rounded-full blur-[50px] opacity-40 animate-pulse"></div>
 
                 <div className="relative z-10">
@@ -100,16 +128,18 @@ export default function CreateCampaignPage() {
                     </p>
                 </div>
 
-                {/* Tips contextuales (Cambian según el foco) */}
+                {/* Tips contextuales Dinámicos */}
                 <div className="relative z-10 mt-10 bg-white/5 rounded-2xl p-5 border border-white/5 backdrop-blur-sm transition-all duration-500">
                     <h4 className="text-[var(--color-brand-orange)] text-xs font-bold uppercase mb-2 flex items-center gap-2">
                         <LayoutTemplate size={14} /> Pro Tip
                     </h4>
-                    <p className="text-xs text-gray-300 transition-all duration-300">
+                    <p className="text-xs text-gray-300 transition-all duration-300 h-10">
                         {focusedField === 'budget' 
                             ? "Un presupuesto competitivo (sobre $100.000) atrae a influencers con mejor engagement." 
                             : focusedField === 'description'
                             ? "Sé específico: ¿Qué deben hacer? ¿Cuántas historias? ¿Qué tono usar?"
+                            : focusedField === 'categories'
+                            ? "Selecciona los nichos más relevantes. Esto ayuda a nuestro motor de recomendación."
                             : "Usa un título corto pero pegajoso. Ej: 'Campaña Verano 2025 - Ropa Urbana'."}
                     </p>
                 </div>
@@ -134,7 +164,45 @@ export default function CreateCampaignPage() {
                         />
                     </div>
 
-                    {/* Grid: Presupuesto y Requisitos (Lado a lado en PC) */}
+                    {/* --- NUEVO: CATEGORÍAS --- */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-700 ml-1 flex items-center gap-2">
+                           Tipo de Contenido <span className="text-gray-400 font-normal text-xs">(Selecciona varios)</span>
+                        </label>
+                        <div className="relative">
+                            <div className={`absolute top-4 left-4 pointer-events-none transition-colors duration-300 ${focusedField === 'categories' ? 'text-[var(--color-brand-orange)]' : 'text-gray-400'}`}>
+                                <Hash size={20} />
+                            </div>
+                            
+                            {/* Contenedor de Chips */}
+                            <div 
+                                className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-xl min-h-[80px] flex flex-wrap gap-2 transition-all duration-300 focus-within:bg-white focus-within:border-[var(--color-brand-orange)] focus-within:ring-4 focus-within:ring-orange-500/10"
+                                onMouseEnter={() => setFocusedField('categories')}
+                                onMouseLeave={() => setFocusedField(null)}
+                            >
+                                {CATEGORIES.map((cat) => {
+                                    const isSelected = formData.categories.includes(cat);
+                                    return (
+                                        <button
+                                            key={cat}
+                                            type="button" // Importante: evita que envíe el formulario
+                                            onClick={() => toggleCategory(cat)}
+                                            className={`
+                                                px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 border
+                                                ${isSelected 
+                                                    ? 'bg-orange-100 text-[var(--color-brand-orange)] border-orange-200 shadow-sm transform scale-105' 
+                                                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100'}
+                                            `}
+                                        >
+                                            {cat}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Grid: Presupuesto y Requisitos */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-gray-700 ml-1">Presupuesto (CLP)</label>
@@ -215,7 +283,7 @@ export default function CreateCampaignPage() {
                                     </>
                                 )}
                             </div>
-                            {/* Efecto de brillo al hacer hover */}
+                            {/* Efecto de brillo */}
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out"></div>
                         </button>
                     </div>
