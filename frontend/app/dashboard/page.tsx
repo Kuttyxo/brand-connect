@@ -300,7 +300,7 @@ export default function DashboardPage() {
           </p>
           
           {/* OJO: He envuelto el botón en un Link para que funcione de verdad al hacer click */}
-          <Link href={isBrand ? '/create-campaign' : '/profile/edit'}>
+          <Link href={isBrand ? '/create-campaign' : '/dashboard/profile/edit'}>
             <button className="mt-6 px-6 py-3 bg-[var(--color-brand-dark)] text-white rounded-xl font-bold hover:bg-[var(--color-brand-orange)] transition-colors">
               {isBrand ? 'Crear Campaña' : 'Completar Perfil'}
             </button>
