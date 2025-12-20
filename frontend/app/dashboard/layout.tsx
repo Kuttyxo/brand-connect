@@ -152,31 +152,71 @@ export default function DashboardLayout({
             ${isMobileMenuOpen ? 'max-h-[calc(100vh-4rem)] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}
           `}
         >
-          <nav className="flex flex-col p-4 space-y-2 border-b border-gray-200">
-            <Link onClick={closeMenu} href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-[var(--color-brand-dark)] bg-gray-50 rounded-xl font-medium">
-              <LayoutDashboard size={20} />
-              Inicio
-            </Link>
-            <Link onClick={closeMenu} href="/dashboard/campaigns" className="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-xl font-medium">
-              <ShoppingBag size={20} />
-              Campañas
-            </Link>
-            <Link onClick={closeMenu} href="/dashboard/profile" className="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-xl font-medium">
-              <Users size={20} />
-              Mi Perfil
-            </Link>
-            <Link onClick={closeMenu} href="/dashboard/settings" className="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-xl font-medium">
-              <Settings size={20} />
-              Configuración
-            </Link>
-            
-            <div className="h-px bg-gray-100 my-2"></div>
-            
-            <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium w-full text-left">
-              <LogOut size={20} />
-              Cerrar Sesión
-            </button>
-          </nav>
+<nav className="flex flex-col p-4 space-y-2 border-b border-gray-200">
+  
+  {/* INICIO */}
+  <Link 
+    onClick={closeMenu} 
+    href="/dashboard" 
+    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+      pathname === '/dashboard'
+        ? 'text-[var(--color-brand-dark)] bg-gray-50' // Estilo ACTIVO
+        : 'text-gray-600 hover:bg-gray-50'            // Estilo INACTIVO
+    }`}
+  >
+    <LayoutDashboard size={20} />
+    Inicio
+  </Link>
+
+  {/* CAMPAÑAS */}
+  <Link 
+    onClick={closeMenu} 
+    href="/dashboard/campaigns" 
+    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+      pathname === '/dashboard/campaigns'
+        ? 'text-[var(--color-brand-dark)] bg-gray-50'
+        : 'text-gray-600 hover:bg-gray-50'
+    }`}
+  >
+    <ShoppingBag size={20} />
+    Campañas
+  </Link>
+
+  {/* MI PERFIL */}
+  <Link 
+    onClick={closeMenu} 
+    href="/dashboard/profile" 
+    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+      pathname === '/dashboard/profile'
+        ? 'text-[var(--color-brand-dark)] bg-gray-50'
+        : 'text-gray-600 hover:bg-gray-50'
+    }`}
+  >
+    <Users size={20} />
+    Mi Perfil
+  </Link>
+
+  {/* CONFIGURACIÓN */}
+  <Link 
+    onClick={closeMenu} 
+    href="/dashboard/settings" 
+    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+      pathname === '/dashboard/settings'
+        ? 'text-[var(--color-brand-dark)] bg-gray-50'
+        : 'text-gray-600 hover:bg-gray-50'
+    }`}
+  >
+    <Settings size={20} />
+    Configuración
+  </Link>
+  
+  <div className="h-px bg-gray-100 my-2"></div>
+  
+  <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium w-full text-left">
+    <LogOut size={20} />
+    Cerrar Sesión
+  </button>
+</nav>
         </div>
         
         {/* Contenido de la página */}
