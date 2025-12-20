@@ -283,24 +283,30 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Footer */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center py-20">
-        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
-          {isBrand ? '📢' : '🚀'}
+{/* Footer Condicional */}
+      {/* Solo se muestra si: (No es marca) O (Es marca pero tiene 0 campañas) */}
+      {(!isBrand || stats.activeCampaigns === 0) && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center py-20 animate-fade-in">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+            {isBrand ? '📢' : '🚀'}
+          </div>
+          <h3 className="text-xl font-bold text-[var(--color-brand-dark)]">
+            {isBrand ? 'Publica tu primera campaña' : '¡Estás listo para despegar!'}
+          </h3>
+          <p className="text-gray-500 max-w-md mx-auto mt-2">
+            {isBrand 
+              ? 'Encuentra a los mejores micro-influencers para tu marca hoy mismo.'
+              : 'Completa tu perfil para que las marcas te encuentren más rápido.'}
+          </p>
+          
+          {/* OJO: He envuelto el botón en un Link para que funcione de verdad al hacer click */}
+          <Link href={isBrand ? '/create-campaign' : '/profile/edit'}>
+            <button className="mt-6 px-6 py-3 bg-[var(--color-brand-dark)] text-white rounded-xl font-bold hover:bg-[var(--color-brand-orange)] transition-colors">
+              {isBrand ? 'Crear Campaña' : 'Completar Perfil'}
+            </button>
+          </Link>
         </div>
-        <h3 className="text-xl font-bold text-[var(--color-brand-dark)]">
-          {isBrand ? 'Publica tu primera campaña' : '¡Estás listo para despegar!'}
-        </h3>
-        <p className="text-gray-500 max-w-md mx-auto mt-2">
-          {isBrand 
-            ? 'Encuentra a los mejores micro-influencers para tu marca hoy mismo.'
-            : 'Completa tu perfil para que las marcas te encuentren más rápido.'}
-        </p>
-        <button className="mt-6 px-6 py-3 bg-[var(--color-brand-dark)] text-white rounded-xl font-bold hover:bg-[var(--color-brand-orange)] transition-colors">
-          {isBrand ? 'Crear Campaña' : 'Completar Perfil'}
-        </button>
-      </div>
-
+      )}
     </div>
   );
 }
