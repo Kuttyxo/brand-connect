@@ -139,7 +139,7 @@ export default function EditProfilePage() {
       console.error(error)
       alert('Error al guardar')
     } else {
-      router.push('/dashboard')
+      router.push('/dashboard/profile')
     }
   }
 
