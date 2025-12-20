@@ -111,7 +111,8 @@ const InfluencerMarketplace = () => {
   // Filtrado en el cliente (para rapidez)
   const filteredCampaigns = campaigns.filter(camp => {
     const matchesSearch = camp.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          camp.description.toLowerCase().includes(searchTerm.toLowerCase());
+                          camp.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          camp.brand?.full_name.toLowerCase().includes(searchTerm.toLowerCase());
     
     // Si la categoría es "Todas", pasa. Si no, revisamos si el array de categorias incluye la seleccionada.
     const matchesCategory = filter === 'Todas' || (camp.categories && camp.categories.includes(filter));

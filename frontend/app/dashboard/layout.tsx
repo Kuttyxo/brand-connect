@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { LayoutDashboard, Users, ShoppingBag, Settings, LogOut, Menu, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 export default function DashboardLayout({
   children,
@@ -13,6 +13,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -22,6 +23,13 @@ export default function DashboardLayout({
   };
 
   const closeMenu = () => setIsMobileMenuOpen(false);
+
+  const getLinkClass = (path: string) => {
+    const isACtive = pathname === path;
+    return isACtive 
+? "flex items-center gap-3 px-4 py-3 text-[var(--color-brand-dark)] bg-gray-100 rounded-xl font-medium transition-colors" // Activo
+      : "flex items-center gap-3 px-4 py-3 text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)] rounded-xl font-medium transition-colors"; // Inactivo
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -42,25 +50,62 @@ export default function DashboardLayout({
           </Link>
         </div>
 
-        {/* Navegación Desktop */}
-        <nav className="flex-1 p-4 space-y-2">
-          <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-[var(--color-brand-dark)] bg-gray-100 rounded-xl font-medium transition-colors">
-            <LayoutDashboard size={20} />
-            Inicio
-          </Link>
-          <Link href="/dashboard/campaigns" className="flex items-center gap-3 px-4 py-3 text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)] rounded-xl font-medium transition-colors">
-            <ShoppingBag size={20} />
-            Campañas
-          </Link>
-          <Link href="/dashboard/profile" className="flex items-center gap-3 px-4 py-3 text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)] rounded-xl font-medium transition-colors">
-            <Users size={20} />
-            Mi Perfil
-          </Link>
-          <Link href="/dashboard/settings" className="flex items-center gap-3 px-4 py-3 text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)] rounded-xl font-medium transition-colors">
-            <Settings size={20} />
-            Configuración
-          </Link>
-        </nav>
+{/* Navegación Desktop Dinámica */}
+<nav className="flex-1 p-4 space-y-2">
+  
+  {/* Botón INICIO */}
+  <Link 
+    href="/dashboard" 
+    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+      pathname === '/dashboard' 
+        ? 'text-[var(--color-brand-dark)] bg-gray-100' // Estilo ACTIVO
+        : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]' // Estilo INACTIVO
+    }`}
+  >
+    <LayoutDashboard size={20} />
+    Inicio
+  </Link>
+
+  {/* Botón CAMPAÑAS */}
+  <Link 
+    href="/dashboard/campaigns" 
+    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+      pathname === '/dashboard/campaigns' 
+        ? 'text-[var(--color-brand-dark)] bg-gray-100' 
+        : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]'
+    }`}
+  >
+    <ShoppingBag size={20} />
+    Campañas
+  </Link>
+
+  {/* Botón MI PERFIL */}
+  <Link 
+    href="/dashboard/profile" 
+    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+      pathname === '/dashboard/profile' 
+        ? 'text-[var(--color-brand-dark)] bg-gray-100' 
+        : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]'
+    }`}
+  >
+    <Users size={20} />
+    Mi Perfil
+  </Link>
+
+  {/* Botón CONFIGURACIÓN */}
+  <Link 
+    href="/dashboard/settings" 
+    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+      pathname === '/dashboard/settings' 
+        ? 'text-[var(--color-brand-dark)] bg-gray-100' 
+        : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]'
+    }`}
+  >
+    <Settings size={20} />
+    Configuración
+  </Link>
+
+</nav>
 
         {/* Botón Salir Desktop */}
         <div className="p-4 border-t border-gray-100">
