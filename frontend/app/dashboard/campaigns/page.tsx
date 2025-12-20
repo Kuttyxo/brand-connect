@@ -206,10 +206,12 @@ const InfluencerMarketplace = () => {
                  </p>
                </div>
 
-               {/* Footer Tarjeta */}
-               <button className="w-full py-3 rounded-xl border-2 border-[var(--color-brand-dark)] text-[var(--color-brand-dark)] font-bold hover:bg-[var(--color-brand-dark)] hover:text-white transition-all">
-                 Ver Detalles & Postular
-               </button>
+{/* Footer Tarjeta */}
+<Link href={`/dashboard/campaigns/${camp.id}`} className="w-full">
+  <button className="w-full py-3 rounded-xl border-2 border-[var(--color-brand-dark)] text-[var(--color-brand-dark)] font-bold hover:bg-[var(--color-brand-dark)] hover:text-white transition-all">
+    Ver Detalles & Postular
+  </button>
+</Link>
             </div>
           ))}
         </div>
