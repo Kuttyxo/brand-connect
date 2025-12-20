@@ -51,20 +51,37 @@ export default function DashboardPage() {
       });
 
       // 2. Si es MARCA, calculamos sus estadísticas reales
-      if (profileData.role === 'brand') {
+if (profileData.role === 'brand') {
+          // A. Traemos las campañas de la marca (Agregamos 'id' al select)
           const { data: campaigns, error: campaignsError } = await supabase
             .from('campaigns')
-            .select('budget, status') // Solo traemos lo necesario para sumar
+            .select('id, budget, status') 
             .eq('brand_id', userId);
 
           if (!campaignsError && campaigns) {
               const active = campaigns.filter(c => c.status === 'open').length;
               const total = campaigns.reduce((sum, c) => sum + (c.budget || 0), 0);
               
+              // B. NUEVO: Contamos las postulaciones reales
+              let candidatesCount = 0;
+              
+              if (campaigns.length > 0) {
+                // Obtenemos los IDs de mis campañas
+                const campaignIds = campaigns.map(c => c.id);
+                
+                // Consultamos a la tabla applications
+                const { count } = await supabase
+                  .from('applications')
+                  .select('*', { count: 'exact', head: true }) // head: true significa "solo dame el número"
+                  .in('campaign_id', campaignIds);
+                  
+                candidatesCount = count || 0;
+              }
+              
               setStats({
                   activeCampaigns: active,
                   totalBudget: total,
-                  candidates: 0 // (Pendiente: conectar con tabla applications)
+                  candidates: candidatesCount // ¡Ahora sí es real! 🚀
               });
           }
       }
@@ -216,7 +233,7 @@ export default function DashboardPage() {
             <span className="text-sm text-gray-400 font-medium">Comprometido</span>
           </div>
 
-          {/* Card 3: Postulaciones (Aún en 0 hasta que hagamos el marketplace) */}
+          {/* Card 3: Postulaciones */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-gray-500 font-medium">Postulaciones</h3>
@@ -225,7 +242,11 @@ export default function DashboardPage() {
             <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
                 {stats.candidates}
             </p>
-            <span className="text-sm text-blue-500 font-medium cursor-pointer hover:underline">Ver candidatos →</span>
+            <Link href="/dashboard/candidates">
+              <span className="text-sm text-blue-500 font-medium cursor-pointer hover:underline">
+                Ver candidatos →
+              </span>
+            </Link>
           </div>
         </div>
       ) : (
