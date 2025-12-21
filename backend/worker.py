@@ -18,7 +18,7 @@ if not URL or not KEY:
 
 try:
     supabase: Client = create_client(URL, KEY)
-    print("🤖 BrandConnect Worker V3 (AGRESIVO) INICIADO 🚀")
+    print("🤖 BrandConnect Worker V4 (FIXED) INICIADO 🚀")
 except Exception as e:
     print(f"❌ Error conectando a Supabase: {e}")
     exit()
@@ -37,9 +37,11 @@ def send_discord_alert(title, description, color, fields):
         }]
     }
     try:
-        requests.post(WEBHOOK_URL, json=data)
+        response = requests.post(WEBHOOK_URL, json=data)
+        # ESTO ES NUEVO: Si Discord dice que no (Error 400), lanzamos error para verlo en consola
+        response.raise_for_status() 
     except Exception as e:
-        print(f"❌ Error enviando alerta a Discord: {e}")
+        print(f"❌ Error enviando alerta a Discord (Posible error de formato): {e}")
 
 def mock_instagram_api(handle):
     print(f"   🔎 Analizando: {handle}...")
@@ -65,16 +67,29 @@ def process_unverified_users():
         user_id = user.get('id')
         role = user.get('role')
         full_name = user.get('full_name') or "Usuario"
-        email = user.get('email')
         
+        # FIX: Si no hay columna email, ponemos un texto por defecto para que Discord no falle
+        email = user.get('email')
+        if not email:
+            email = "No visible (Auth)"
+
         print(f"👉 Procesando: {full_name} ({role})")
 
         # --- CASO 1: MARCA ---
         if role == 'brand':
             try:
+                # 1. Verificar en DB
                 supabase.table('profiles').update({'is_verified': True}).eq('id', user_id).execute()
-                print(f"   ✅ Marca Verificada.")
-                send_discord_alert("🏢 Nueva Marca", f"**{full_name}** verificada.", 8388863, [{"name": "Email", "value": email, "inline": True}])
+                print(f"   ✅ Marca Verificada en DB.")
+                
+                # 2. Enviar a Discord (Ahora con email seguro)
+                send_discord_alert(
+                    "🏢 Nueva Marca", 
+                    f"**{full_name}** ha sido verificada.", 
+                    8388863, # Morado
+                    [{"name": "Estado", "value": "Verificado ✅", "inline": True}]
+                )
+                print("   📨 Alerta enviada.")
             except Exception as e:
                 print(f"   ❌ Error Marca: {e}")
 
@@ -82,26 +97,17 @@ def process_unverified_users():
         elif role == 'influencer':
             handle = user.get('instagram_handle') or user.get('tiktok_handle')
             
-            # LÓGICA AGRESIVA: Si no hay handle, usamos el nombre
             if not handle:
-                # Quitamos espacios en blanco por si acaso
                 candidate = full_name.strip()
-                
-                # Si el nombre NO tiene espacios (ej: "k_.andree"), asumimos que es el handle
                 if " " not in candidate:
                     handle = candidate
-                    # Si le falta la arroba, se la ponemos
-                    if not handle.startswith('@'):
-                        handle = f"@{handle}"
-                    
-                    # Guardamos el cambio en la DB para arreglar el perfil
-                    print(f"   🔧 Auto-corrección: Nombre '{full_name}' convertido a handle '{handle}'")
+                    if not handle.startswith('@'): handle = f"@{handle}"
+                    print(f"   🔧 Auto-corrección: Handle '{handle}'")
                     supabase.table('profiles').update({'instagram_handle': handle}).eq('id', user_id).execute()
                 else:
-                    print("   ⚠️ El nombre tiene espacios y no parece un usuario. Saltando.")
+                    print("   ⚠️ Nombre con espacios, saltando.")
                     continue
 
-            # Analizar y Verificar
             social_data = mock_instagram_api(handle)
             if social_data:
                 try:
@@ -111,7 +117,7 @@ def process_unverified_users():
                         "engagement_rate": social_data['engagement']
                     }).eq('id', user_id).execute()
                     
-                    print(f"   ✅ {handle} verificado ({social_data['followers']} seguidores).")
+                    print(f"   ✅ {handle} verificado.")
                     
                     send_discord_alert(
                         "🚀 Influencer Verificado", 
