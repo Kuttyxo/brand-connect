@@ -18,7 +18,9 @@ if not URL or not KEY:
 
 try:
     supabase: Client = create_client(URL, KEY)
-    print("🤖 BrandConnect Worker INICIADO (Modo Admin) 🚀")
+    print("🤖 BrandConnect Worker V2 INICIADO 🚀")
+    if not WEBHOOK_URL:
+        print("⚠️ ADVERTENCIA: No hay DISCORD_WEBHOOK_URL. No llegarán notificaciones.")
 except Exception as e:
     print(f"❌ Error conectando a Supabase: {e}")
     exit()
@@ -42,7 +44,7 @@ def send_discord_alert(title, description, color, fields):
         print(f"❌ Error enviando alerta a Discord: {e}")
 
 def mock_instagram_api(handle):
-    print(f"   🔎 Consultando métricas para: {handle}...")
+    print(f"   🔎 Consultando métricas simuladas para: {handle}...")
     time.sleep(1) 
     if "fake" in str(handle).lower(): return None
     return {
@@ -52,7 +54,7 @@ def mock_instagram_api(handle):
 
 def process_unverified_users():
     try:
-        # Traemos solo los no verificados
+        # Traemos SOLO los no verificados
         response = supabase.table('profiles').select("*").eq('is_verified', False).execute()
         users = response.data
     except Exception as e:
@@ -61,7 +63,7 @@ def process_unverified_users():
 
     if not users: return 
 
-    print(f"🚀 Encontrados {len(users)} usuarios sin verificar.")
+    print(f"🚀 Encontrados {len(users)} usuarios pendientes.")
 
     for user in users:
         user_id = user.get('id')
@@ -77,26 +79,36 @@ def process_unverified_users():
                 # Verificamos la marca
                 supabase.table('profiles').update({'is_verified': True}).eq('id', user_id).execute()
                 
+                print(f"   ✅ Marca '{full_name}' marcada como verificada en DB.")
+                
                 send_discord_alert(
                     "🏢 Nueva Marca Registrada",
-                    f"La empresa **{full_name}** ha sido verificada.",
+                    f"La empresa **{full_name}** se ha unido a la plataforma.",
                     8388863, # Morado
                     [{"name": "Email", "value": email, "inline": True}]
                 )
-                print("   ✅ Marca verificada.")
+                print("   📨 Notificación enviada a Discord.")
+
             except Exception as e:
-                print(f"   ❌ Error verificando marca: {e}")
+                print(f"   ❌ Error procesando marca: {e}")
 
         # --- CASO 2: INFLUENCER ---
         elif role == 'influencer':
-            # CORRECCIÓN AQUÍ: Buscamos instagram_handle O tiktok_handle
+            # INTELIGENCIA: Buscar handle en columnas O en el nombre
             handle = user.get('instagram_handle') or user.get('tiktok_handle')
             
+            # Si no hay handle en las columnas, miramos si el nombre empieza con @
+            if not handle and full_name.startswith('@'):
+                print(f"   💡 Detectado handle en el nombre: {full_name}")
+                handle = full_name
+                # Guardamos este descubrimiento en la columna correcta para el futuro
+                supabase.table('profiles').update({'instagram_handle': handle}).eq('id', user_id).execute()
+
             if not handle:
-                print(f"   ⚠️ Influencer sin redes sociales configuradas. Saltando.")
+                print(f"   ⚠️ No se encontró handle (ni en columnas ni nombre con @). Saltando.")
                 continue
 
-            # Simulamos análisis de métricas
+            # Simulamos análisis
             social_data = mock_instagram_api(handle)
             
             if social_data:
@@ -118,13 +130,13 @@ def process_unverified_users():
                             {"name": "Engagement", "value": f"{social_data['engagement']}%", "inline": True}
                         ]
                     )
-                    print(f"   ✅ Influencer {handle} verificado con éxito.")
+                    print(f"   ✅ Influencer {handle} verificado y notificado.")
                 except Exception as e:
-                    print(f"   ❌ Error actualizando Influencer (¿Faltan columnas en DB?): {e}")
+                    print(f"   ❌ Error actualizando Influencer: {e}")
 
 # --- EJECUCIÓN ---
 if __name__ == "__main__":
     while True:
         process_unverified_users()
-        print("⏳ Esperando 10s...")
+        # print("⏳ Esperando 10s...") # Comentado para no spamear la consola, descomentar si quieres
         time.sleep(10)
