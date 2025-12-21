@@ -71,10 +71,10 @@ export default function CreateCampaignPage() {
       if (error) throw error;
       router.push('/dashboard');
       
-    } catch (error) {
-      console.error('Error creando campaña:', error);
-      alert('Hubo un error al crear la campaña.');
-    } finally {
+} catch (error: any) {
+  console.error('Error DETALLADO:', error.message || error);
+  alert(`Error: ${error.message || 'Hubo un error al crear la campaña.'}`);
+} finally {
       setLoading(false);
     }
   };
