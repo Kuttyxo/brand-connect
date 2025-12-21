@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { LayoutDashboard, Users, ShoppingBag, Settings, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingBag, Settings, LogOut, Menu, X, MessageSquare } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 
@@ -90,6 +90,14 @@ export default function DashboardLayout({
   >
     <Users size={20} />
     Mi Perfil
+  </Link>
+
+{/* --- MENSAJES --- */}
+  <Link href="/dashboard/messages">
+    <div className="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer">
+      <MessageSquare size={20} />
+      <span className="font-medium">Mensajes</span>
+    </div>
   </Link>
 
   {/* Botón CONFIGURACIÓN */}
