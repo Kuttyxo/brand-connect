@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, DollarSign, FileText, Target, Send, Loader2, Sparkles, LayoutTemplate, Hash, CreditCard, ShieldCheck, CheckCircle } from 'lucide-react';
+// Agregué 'Info' a los imports para el icono de la advertencia
+import { ArrowLeft, DollarSign, FileText, Target, Send, Loader2, Sparkles, LayoutTemplate, Hash, CreditCard, ShieldCheck, CheckCircle, Info } from 'lucide-react';
 import Link from 'next/link';
 
 // Lista de Categorías Disponibles
@@ -68,8 +69,8 @@ export default function CreateCampaignPage() {
           budget: Number(formData.budget),
           categories: formData.categories,
           status: 'open',
-          is_paid: true, // <--- CAMBIO IMPORTANTE
-          payment_amount: PUBLICATION_FEE // <--- CAMBIO IMPORTANTE
+          is_paid: true, 
+          payment_amount: PUBLICATION_FEE
         });
 
       if (error) throw error;
@@ -241,6 +242,15 @@ export default function CreateCampaignPage() {
                                         onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
                                     />
                                 </div>
+                                
+                                {/* --- AQUÍ AGREGUÉ LA ADVERTENCIA DE COMISIÓN --- */}
+                                <div className="flex items-start gap-2 mt-2 px-1">
+                                    <Info size={14} className="text-[var(--color-brand-orange)] shrink-0 mt-0.5" />
+                                    <p className="text-xs text-gray-500">
+                                        <span className="font-bold text-[var(--color-brand-orange)]">Nota:</span> Considera que se descontará un <strong>10% de comisión</strong> de servicio al momento de pagar al influencer.
+                                    </p>
+                                </div>
+                                {/* -------------------------------------------- */}
                             </div>
 
                             <div className="space-y-2">
