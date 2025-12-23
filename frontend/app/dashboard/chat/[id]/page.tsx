@@ -209,8 +209,8 @@ export default function ChatPage() {
       {/* MODALES */}
       {showOfferModal && <CreateOfferModal applicationId={id as string} influencerName={otherUser?.full_name} onClose={() => setShowOfferModal(false)} onOfferSent={handleOfferSent}/>}
       {showReviewModal && <ReviewOfferModal applicationId={id as string} onClose={() => setShowReviewModal(false)} onDecision={handleDecisionMade}/>}
-      {showSubmitModal && <SubmitWorkModal applicationId={id as string} onClose={() => setShowSubmitModal(false)} onSubmitted={handleWorkSubmitted}/>}
-      {showReleaseModal && <ReleasePaymentModal applicationId={id as string} onClose={() => setShowReleaseModal(false)} onPaymentReleased={handlePaymentReleased}/>}
+      {showSubmitModal && <SubmitWorkModal applicationId={id as string} onClose={() => setShowSubmitModal(false)} onSubmitted={handleWorkSubmitted}/>}     
+      {showReleaseModal && (<ReleasePaymentModal applicationId={id as string} onClose={() => setShowReleaseModal(false)} onPaymentReleased={handlePaymentReleased}onChangesRequested={() => {}}/>)}
 
     </div>
   );
