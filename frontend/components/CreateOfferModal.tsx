@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, DollarSign, Calendar, FileText, Calculator, Loader2, Sparkles } from 'lucide-react';
+import { X, DollarSign, Calendar, FileText, Calculator, Loader2, Sparkles, Lock } from 'lucide-react';
 
 interface Props {
   applicationId: string;
@@ -22,6 +22,52 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
   const [deliverables, setDeliverables] = useState('');
   const [deadline, setDeadline] = useState('');
 
+  // --- LÓGICA DE CARGA AUTOMÁTICA DE PRESUPUESTO ---
+  useEffect(() => {
+    const fetchBudget = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('applications')
+          .select(`
+            price_proposal,
+            campaign:campaigns (
+                budget
+            )
+          `)
+          .eq('id', applicationId)
+          .single();
+
+        if (error) {
+            console.error("Error cargando presupuesto:", error);
+            return;
+        }
+
+        if (data) {
+            const campaignData = data.campaign as any;
+            
+            // Verificamos si vino como array o como objeto
+            const campaignBudget = Array.isArray(campaignData) 
+                ? campaignData[0]?.budget 
+                : campaignData?.budget;
+
+            // Prioridad: 1. Propuesta Influencer, 2. Presupuesto Campaña
+            const finalAmount = data.price_proposal || campaignBudget;
+
+            if (finalAmount) {
+                setAmount(String(finalAmount));
+            }
+        }
+      } catch (err) {
+        console.error("Error en try/catch:", err);
+      }
+    };
+
+    if (applicationId) {
+        fetchBudget();
+    }
+  }, [applicationId]);
+  // ------------------------------------------------
+
   // Cálculos en tiempo real
   const numericAmount = Number(amount) || 0;
   const fee = numericAmount * PLATFORM_FEE_PERCENTAGE;
@@ -35,7 +81,7 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No autenticado");
 
-      // 1. Crear el acuerdo en la base de datos (Tabla Agreements)
+      // 1. Crear el acuerdo
       const { error: agreementError } = await supabase.from('agreements').insert({
         application_id: applicationId,
         deliverables,
@@ -43,12 +89,12 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
         total_amount: numericAmount,
         platform_fee: fee,
         payout_amount: payout,
-        payment_status: 'pending' // Pendiente de pago
+        payment_status: 'pending'
       });
 
       if (agreementError) throw agreementError;
 
-      // 2. Cambiar estado de la postulación a 'offered' (Ofertado)
+      // 2. Actualizar estado
       const { error: appError } = await supabase
         .from('applications')
         .update({ status: 'offered' })
@@ -56,15 +102,17 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
 
       if (appError) throw appError;
 
-      // 3. Enviar mensaje automático al chat para que quede registro
+      // 3. Enviar mensaje
+      const msgContent = `📝 PROPUESTA DE CONTRATO:\n\n💰 Precio Total: $${numericAmount.toLocaleString('es-CL')}\n📅 Fecha Límite: ${deadline}\n📦 Entregables: ${deliverables}\n\n(Esperando aceptación del Influencer...)`;
+
       await supabase.from('messages').insert({
         application_id: applicationId,
         sender_id: user.id,
-        content: `📝 PROPUESTA DE CONTRATO:\n\n💰 Precio Total: $${numericAmount.toLocaleString('es-CL')}\n📅 Fecha Límite: ${deadline}\n📦 Entregables: ${deliverables}\n\n(Esperando aceptación del Influencer...)`
+        content: msgContent
       });
 
-      onOfferSent(); // Avisar al padre que recargue
-      onClose(); // Cerrar modal
+      onOfferSent();
+      onClose();
       alert('¡Propuesta enviada correctamente!');
 
     } catch (error: any) {
@@ -104,6 +152,7 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
             <textarea 
               required
               rows={3}
+              autoFocus
               placeholder="Ej: 1 Reel de 30s + 2 Historias con Link. Mencionar @marca..."
               className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-[var(--color-brand-orange)] outline-none text-sm transition-all resize-none"
               value={deliverables}
@@ -112,20 +161,20 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Input: Precio */}
+            {/* Input: Precio (BLOQUEADO) */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                <DollarSign size={14}/> Tu Presupuesto
+              <label className="text-xs font-bold text-gray-400 uppercase flex items-center gap-2">
+                <Lock size={12}/> Presupuesto Acordado
               </label>
-              <input 
-                type="number" 
-                required
-                min="1000"
-                placeholder="150000"
-                className="w-full p-3 bg-gray-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-[var(--color-brand-orange)] outline-none text-sm font-mono font-bold text-gray-800"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
+              <div className="relative">
+                <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                <input 
+                    type="text" // Cambiado a text para mejor control visual, ya que no se edita
+                    readOnly
+                    className="w-full p-3 pl-9 bg-gray-100 border-2 border-gray-100 rounded-xl text-sm font-mono font-bold text-gray-500 cursor-not-allowed outline-none select-none"
+                    value={Number(amount).toLocaleString('es-CL')} // Formateado bonito con puntos
+                />
+              </div>
             </div>
 
             {/* Input: Fecha */}
