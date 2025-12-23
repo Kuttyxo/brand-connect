@@ -32,7 +32,8 @@ export default function MessagesPage() {
             brand:profiles!brand_id(*)
           )
         `)
-        .eq('status', 'accepted') // Solo mostramos chats activos
+        .neq('status', 'pending')
+        .neq('status', 'rejected')
         .order('created_at', { ascending: false });
 
       if (error) console.error(error);
