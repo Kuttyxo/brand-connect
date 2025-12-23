@@ -4,7 +4,9 @@ import { useState, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Building2, User } from 'lucide-react'; // Iconos opcionales para decorar
+
+// Correo del Super Admin
+const ADMIN_EMAIL = 'kuttyxodev@gmail.com';
 
 function AuthForm() {
   const params = useSearchParams();
@@ -16,54 +18,42 @@ function AuthForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
-  // --- CAMPOS NUEVOS ---
-  const [brandName, setBrandName] = useState(''); // Nombre de la marca (Ej: Nike)
-  const [socialHandle, setSocialHandle] = useState(''); // Instagram del influencer
+  const [brandName, setBrandName] = useState(''); 
+  const [socialHandle, setSocialHandle] = useState(''); 
   
   const [role, setRole] = useState<'brand' | 'influencer'>(roleParam);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleAuth = async (e: React.FormEvent) => {
+const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     
     try {
       if (isLogin) {
         // --- LOGIN ---
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
-        router.push('/dashboard'); 
-        router.refresh();
+        
+        // 🛠️ FIX: Forzamos al navegador a actualizar las cookies antes de redirigir
+        router.refresh(); 
+        
+        // Pequeña pausa de seguridad para dar tiempo a la cookie
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // --- DETECCIÓN DE ADMIN VIP 🕵️‍♂️ ---
+        if (data.user?.email === ADMIN_EMAIL) {
+            router.replace('/admin'); // Usamos 'replace' en vez de 'push'
+        } else {
+            router.replace('/dashboard'); 
+        }
 
       } else {
-        // --- REGISTRO ---
-        // Definimos cuál será el "nombre a mostrar"
-        // Si es Marca -> brandName (ej: Adidas)
-        // Si es Influencer -> socialHandle (ej: @kutty)
-        const displayName = role === 'brand' ? brandName : socialHandle;
-
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { 
-              role: role,
-              full_name: displayName, // <--- AQUÍ ENVIAMOS EL NOMBRE
-              username: role === 'influencer' 
-                ? (socialHandle.startsWith('@') ? socialHandle : `@${socialHandle}`) 
-                : null 
-            }
-          }
-        });
-
-        if (error) throw error;
-        alert('¡Cuenta creada con éxito!');
-        router.push('/dashboard');
-        router.refresh();
+        // ... (El código de Registro déjalo igual, pero agrega router.refresh() si quieres)
+        // ...
       }
 
     } catch (error: any) {
