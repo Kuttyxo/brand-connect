@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Send, ArrowLeft, User, FileText, CheckCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
-import CreateOfferModal from '@/components/CreateOfferModal'; // <--- IMPORTANTE: Asegúrate de haber creado este archivo
+import CreateOfferModal from '@/components/CreateOfferModal'; 
+import ReviewOfferModal from '@/components/ReviewOfferModal';
 
 export default function ChatPage() {
   const { id } = useParams(); // ID de la Application
@@ -13,7 +14,8 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const [otherUser, setOtherUser] = useState<any>(null); // Con quién hablo
+  const [otherUser, setOtherUser] = useState<any>(null); 
+  const [showReviewModal, setShowReviewModal] = useState(false);
   
   // --- NUEVOS ESTADOS PARA V2 ---
   const [appStatus, setAppStatus] = useState<string>(''); // Estado actual (accepted, offered, hired...)
@@ -106,6 +108,15 @@ export default function ChatPage() {
       fetchMessages();
   };
 
+const handleDecisionMade = (decision: string) => {
+      if (decision === 'accepted') {
+          setAppStatus('hired'); // Visualmente cambiamos a CONTRATADO
+      } else {
+          setAppStatus('accepted'); // Volvemos a negociar
+      }
+      fetchMessages(); // Recargamos para ver el mensaje automático
+  };
+
   if (loading) return <div className="p-10 text-center">Cargando chat...</div>;
 
   return (
@@ -170,7 +181,10 @@ export default function ChatPage() {
                 {isSystemMessage && !isMe && userRole === 'influencer' && appStatus === 'offered' && (
                     <div className="mt-3 pt-3 border-t border-white/20">
                         <p className="text-xs opacity-70 mb-2 italic">La marca espera tu confirmación.</p>
-                        <button className="w-full bg-white text-gray-900 font-bold py-2 rounded hover:bg-green-50 transition-colors">
+                        <button
+                        onClick={() => setShowReviewModal(true)}
+                        className="w-full bg-white text-gray-900 font-bold py-2 rounded hover:bg-green-50 transition-colors"
+                        >
                             Ver Detalles y Aceptar
                         </button>
                     </div>
@@ -207,6 +221,15 @@ export default function ChatPage() {
             influencerName={otherUser?.full_name || 'Influencer'}
             onClose={() => setShowOfferModal(false)}
             onOfferSent={handleOfferSent}
+        />
+      )}
+
+{/* --- MODAL DE REVISIÓN (INFLUENCER) --- */}
+      {showReviewModal && (
+        <ReviewOfferModal 
+            applicationId={id as string}
+            onClose={() => setShowReviewModal(false)}
+            onDecision={handleDecisionMade}
         />
       )}
 
