@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, Filter, Briefcase, DollarSign, Calendar, MapPin, Loader2, Plus } from 'lucide-react';
+import { Search, Filter, Briefcase, Plus, Lock, Unlock, Eye, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 // --- COMPONENTE 1: VISTA PARA MARCAS (Gestor) ---
@@ -23,7 +23,32 @@ const BrandCampaignsManager = ({ userId }: { userId: string }) => {
     fetchMyCampaigns();
   }, [userId]);
 
-  if (loading) return <div className="p-10 text-center text-gray-400">Cargando tus campañas...</div>;
+  // --- NUEVA LÓGICA: Cambiar estado (Cerrar/Abrir) ---
+  const toggleCampaignStatus = async (campaignId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'open' ? 'closed' : 'open';
+    const actionText = newStatus === 'closed' ? 'cerrar' : 'reabrir';
+
+    if (!confirm(`¿Estás seguro de que deseas ${actionText} esta campaña? \n\n${newStatus === 'closed' ? 'Los influencers ya no podrán verla ni postular.' : 'Volverá a ser visible en el mercado.'}`)) return;
+
+    try {
+        const { error } = await supabase
+            .from('campaigns')
+            .update({ status: newStatus })
+            .eq('id', campaignId);
+
+        if (error) throw error;
+
+        // Actualizar estado localmente para feedback inmediato
+        setCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: newStatus } : c));
+
+    } catch (error) {
+        console.error(error);
+        alert('No se pudo actualizar el estado.');
+    }
+  };
+  // ----------------------------------------------------
+
+  if (loading) return <div className="p-10 text-center text-gray-400 flex justify-center"><Loader2 className="animate-spin"/></div>;
 
   return (
     <div className="space-y-6">
@@ -58,17 +83,41 @@ const BrandCampaignsManager = ({ userId }: { userId: string }) => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {campaigns.map((camp) => (
-                <tr key={camp.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-[var(--color-brand-dark)]">{camp.title}</td>
+                <tr key={camp.id} className={`hover:bg-gray-50 transition-colors ${camp.status === 'closed' ? 'bg-gray-50/50' : ''}`}>
+                  <td className="px-6 py-4">
+                      <p className={`font-medium ${camp.status === 'closed' ? 'text-gray-400' : 'text-[var(--color-brand-dark)]'}`}>
+                          {camp.title}
+                      </p>
+                  </td>
                   <td className="px-6 py-4 text-gray-600">${camp.budget.toLocaleString()}</td>
                   <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold 
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold flex w-fit items-center gap-1
                       ${camp.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {camp.status === 'open' ? 'Activa' : 'Cerrada'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button className="text-[var(--color-brand-orange)] font-bold text-sm hover:underline">Ver Detalles</button>
+                    <div className="flex items-center justify-end gap-3">
+                        
+                        {/* Botón Ver Detalles (Link Real) */}
+                        <Link href={`/dashboard/campaigns/${camp.id}`} className="text-[var(--color-brand-orange)] font-bold text-sm hover:underline flex items-center gap-1">
+                             <Eye size={16}/> Ver
+                        </Link>
+
+                        {/* Botón Cerrar/Abrir (Toggle) */}
+                        <button 
+                            onClick={() => toggleCampaignStatus(camp.id, camp.status)}
+                            className={`p-2 rounded-full transition-colors ${
+                                camp.status === 'open' 
+                                ? 'text-gray-400 hover:text-red-500 hover:bg-red-50' 
+                                : 'text-gray-400 hover:text-green-500 hover:bg-green-50'
+                            }`}
+                            title={camp.status === 'open' ? "Cerrar Campaña" : "Reabrir Campaña"}
+                        >
+                            {camp.status === 'open' ? <Lock size={16} /> : <Unlock size={16} />}
+                        </button>
+
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -162,7 +211,7 @@ const InfluencerMarketplace = () => {
       {/* Grid de Campañas */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {[1,2,3].map(i => <div key={i} className="h-64 bg-gray-100 rounded-2xl animate-pulse"></div>)}
+            {[1,2,3].map(i => <div key={i} className="h-64 bg-gray-100 rounded-2xl animate-pulse"></div>)}
         </div>
       ) : filteredCampaigns.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
@@ -206,12 +255,12 @@ const InfluencerMarketplace = () => {
                  </p>
                </div>
 
-{/* Footer Tarjeta */}
-<Link href={`/dashboard/campaigns/${camp.id}`} className="w-full">
-  <button className="w-full py-3 rounded-xl border-2 border-[var(--color-brand-dark)] text-[var(--color-brand-dark)] font-bold hover:bg-[var(--color-brand-dark)] hover:text-white transition-all">
-    Ver Detalles & Postular
-  </button>
-</Link>
+               {/* Footer Tarjeta */}
+               <Link href={`/dashboard/campaigns/${camp.id}`} className="w-full">
+                 <button className="w-full py-3 rounded-xl border-2 border-[var(--color-brand-dark)] text-[var(--color-brand-dark)] font-bold hover:bg-[var(--color-brand-dark)] hover:text-white transition-all">
+                   Ver Detalles & Postular
+                 </button>
+               </Link>
             </div>
           ))}
         </div>
