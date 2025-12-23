@@ -3,8 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-
-// Imports correctos para evitar conflictos
 import Link from 'next/link'; 
 import { Users, DollarSign, Briefcase, Star, Activity, LoaderCircle } from 'lucide-react'; 
 
@@ -20,7 +18,6 @@ type Profile = {
 export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   
-  // Nuevo estado para las estadísticas de la marca
   const [stats, setStats] = useState({
     activeCampaigns: 0,
     totalBudget: 0,
@@ -30,10 +27,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Función MAESTRA para pedir todos los datos (Perfil + Estadísticas)
   const fetchDashboardData = useCallback(async (userId: string) => {
     try {
-      // 1. Obtener Perfil
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -42,7 +37,6 @@ export default function DashboardPage() {
 
       if (profileError) throw profileError;
       
-      // Actualizamos perfil si cambió
       setProfile((prev) => {
           if (JSON.stringify(prev) !== JSON.stringify(profileData)) {
               return profileData;
@@ -50,9 +44,7 @@ export default function DashboardPage() {
           return prev;
       });
 
-      // 2. Si es MARCA, calculamos sus estadísticas reales
-if (profileData.role === 'brand') {
-          // A. Traemos las campañas de la marca (Agregamos 'id' al select)
+      if (profileData.role === 'brand') {
           const { data: campaigns, error: campaignsError } = await supabase
             .from('campaigns')
             .select('id, budget, status') 
@@ -62,17 +54,13 @@ if (profileData.role === 'brand') {
               const active = campaigns.filter(c => c.status === 'open').length;
               const total = campaigns.reduce((sum, c) => sum + (c.budget || 0), 0);
               
-              // B. NUEVO: Contamos las postulaciones reales
               let candidatesCount = 0;
               
               if (campaigns.length > 0) {
-                // Obtenemos los IDs de mis campañas
                 const campaignIds = campaigns.map(c => c.id);
-                
-                // Consultamos a la tabla applications
                 const { count } = await supabase
                   .from('applications')
-                  .select('*', { count: 'exact', head: true }) // head: true significa "solo dame el número"
+                  .select('*', { count: 'exact', head: true }) 
                   .in('campaign_id', campaignIds);
                   
                 candidatesCount = count || 0;
@@ -81,7 +69,7 @@ if (profileData.role === 'brand') {
               setStats({
                   activeCampaigns: active,
                   totalBudget: total,
-                  candidates: candidatesCount // ¡Ahora sí es real! 🚀
+                  candidates: candidatesCount 
               });
           }
       }
@@ -104,18 +92,13 @@ if (profileData.role === 'brand') {
           return;
         }
 
-        // 1. Carga Inicial
         await fetchDashboardData(user.id);
         setLoading(false);
 
-        // 2. RESPALDO (Polling cada 4s)
         pollingInterval = setInterval(async () => {
             await fetchDashboardData(user.id);
         }, 4000);
 
-        // 3. REALTIME: Escuchamos cambios en PERFIL
-        console.log("🔌 Conectando Realtime...");
-        
         channelProfiles = supabase
           .channel('dashboard_profiles')
           .on('postgres_changes', 
@@ -124,14 +107,11 @@ if (profileData.role === 'brand') {
           )
           .subscribe();
 
-        // 4. REALTIME: Escuchamos cambios en CAMPAÑAS (Nuevo)
-        // Así el contador sube apenas creas una campaña
         channelCampaigns = supabase
           .channel('dashboard_campaigns')
           .on('postgres_changes', 
             { event: '*', schema: 'public', table: 'campaigns', filter: `brand_id=eq.${user.id}` },
             () => {
-                console.log("🔔 Cambio en campañas detectado!");
                 fetchDashboardData(user.id);
             }
           )
@@ -152,7 +132,6 @@ if (profileData.role === 'brand') {
     };
   }, [router, fetchDashboardData]);
   
-  // --- SKELETON LOADING ---
   if (loading) {
     return (
       <div className="animate-pulse space-y-8">
@@ -168,7 +147,6 @@ if (profileData.role === 'brand') {
 
   const isBrand = profile?.role === 'brand';
 
-  // Formateador de dinero (CLP)
   const formatMoney = (amount: number) => {
     return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
   };
@@ -200,14 +178,13 @@ if (profileData.role === 'brand') {
         // VISTA MARCA
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* Card 1: Campañas Activas (AHORA REAL) */}
+          {/* Card 1: Campañas Activas */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-gray-500 font-medium">Campañas Activas</h3>
               <span className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Briefcase size={20}/></span>
             </div>
             
-            {/* Número Dinámico */}
             <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
                 {stats.activeCampaigns}
             </p>
@@ -218,14 +195,13 @@ if (profileData.role === 'brand') {
 
           </div>
 
-          {/* Card 2: Presupuesto Total (AHORA REAL) */}
+          {/* Card 2: Presupuesto Total */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-gray-500 font-medium">Inversión Total</h3>
               <span className="p-2 bg-green-50 text-green-600 rounded-lg"><DollarSign size={20}/></span>
             </div>
             
-            {/* Dinero Dinámico */}
             <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">
                 {formatMoney(stats.totalBudget)}
             </p>
@@ -304,9 +280,12 @@ if (profileData.role === 'brand') {
         </div>
       )}
 
-{/* Footer Condicional */}
-      {/* Solo se muestra si: (No es marca) O (Es marca pero tiene 0 campañas) */}
-      {(!isBrand || stats.activeCampaigns === 0) && (
+      {/* Footer Condicional CORREGIDO */}
+      {/* Antes: Se mostraba a todos los influencers siempre.
+          Ahora: Si es MARCA, se muestra si no tiene campañas.
+                 Si es INFLUENCER, se muestra solo si NO está verificado. 
+      */}
+      {((isBrand && stats.activeCampaigns === 0) || (!isBrand && !profile?.is_verified)) && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center py-20 animate-fade-in">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
             {isBrand ? '📢' : '🚀'}
@@ -320,7 +299,6 @@ if (profileData.role === 'brand') {
               : 'Completa tu perfil para que las marcas te encuentren más rápido.'}
           </p>
           
-          {/* OJO: He envuelto el botón en un Link para que funcione de verdad al hacer click */}
           <Link href={isBrand ? '/create-campaign' : '/dashboard/profile/edit'}>
             <button className="mt-6 px-6 py-3 bg-[var(--color-brand-dark)] text-white rounded-xl font-bold hover:bg-[var(--color-brand-orange)] transition-colors">
               {isBrand ? 'Crear Campaña' : 'Completar Perfil'}
