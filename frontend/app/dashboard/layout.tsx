@@ -93,12 +93,17 @@ export default function DashboardLayout({
   </Link>
 
 {/* --- MENSAJES --- */}
-  <Link href="/dashboard/messages">
-    <div className="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer">
-      <MessageSquare size={20} />
-      <span className="font-medium">Mensajes</span>
-    </div>
-  </Link>
+<Link 
+  href="/dashboard/messages" 
+  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+    pathname === '/dashboard/messages' 
+      ? 'text-[var(--color-brand-dark)] bg-gray-100' 
+      : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]'
+  }`}
+>
+  <MessageSquare size={20} />
+  Mensajes
+</Link>
 
   {/* Botón CONFIGURACIÓN */}
   <Link 
