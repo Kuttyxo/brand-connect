@@ -81,20 +81,22 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No autenticado");
 
-      // 1. Crear el acuerdo
-      const { error: agreementError } = await supabase.from('agreements').insert({
-        application_id: applicationId,
-        deliverables,
-        deadline,
-        total_amount: numericAmount,
-        platform_fee: fee,
-        payout_amount: payout,
-        payment_status: 'pending'
-      });
+      // 1. Crear o Actualizar (UPSERT) el acuerdo
+      const { error: agreementError } = await supabase
+        .from('agreements')
+        .upsert({
+            application_id: applicationId,
+            deliverables,
+            deadline,
+            total_amount: numericAmount,
+            platform_fee: fee,
+            payout_amount: payout,
+            payment_status: 'pending'
+        }, { onConflict: 'application_id' });
 
       if (agreementError) throw agreementError;
 
-      // 2. Actualizar estado
+      // 2. Actualizar estado de la postulación
       const { error: appError } = await supabase
         .from('applications')
         .update({ status: 'offered' })
@@ -102,8 +104,9 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
 
       if (appError) throw appError;
 
-      // 3. Enviar mensaje
-      const msgContent = `📝 PROPUESTA DE CONTRATO:\n\n💰 Precio Total: $${numericAmount.toLocaleString('es-CL')}\n📅 Fecha Límite: ${deadline}\n📦 Entregables: ${deliverables}\n\n(Esperando aceptación del Influencer...)`;
+      // 3. Enviar mensaje (CORREGIDO: Muestra el Payout Neto)
+      // Usamos 'payout' en lugar de 'numericAmount' para que coincida con lo que recibe el influencer.
+      const msgContent = `📝 PROPUESTA DE CONTRATO (ACTUALIZADA):\n\n💰 Tu Pago (Neto): $${payout.toLocaleString('es-CL')}\n📅 Fecha Límite: ${deadline}\n📦 Entregables: ${deliverables}\n\n(Esperando aceptación del Influencer...)`;
 
       await supabase.from('messages').insert({
         application_id: applicationId,
@@ -113,7 +116,7 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
 
       onOfferSent();
       onClose();
-      alert('¡Propuesta enviada correctamente!');
+      alert('¡Nueva propuesta enviada correctamente!');
 
     } catch (error: any) {
       console.error(error);
@@ -169,10 +172,10 @@ export default function CreateOfferModal({ applicationId, influencerName, onClos
               <div className="relative">
                 <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
                 <input 
-                    type="text" // Cambiado a text para mejor control visual, ya que no se edita
+                    type="text" 
                     readOnly
                     className="w-full p-3 pl-9 bg-gray-100 border-2 border-gray-100 rounded-xl text-sm font-mono font-bold text-gray-500 cursor-not-allowed outline-none select-none"
-                    value={Number(amount).toLocaleString('es-CL')} // Formateado bonito con puntos
+                    value={Number(amount).toLocaleString('es-CL')} 
                 />
               </div>
             </div>
