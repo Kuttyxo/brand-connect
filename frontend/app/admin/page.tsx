@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ShieldAlert, MessageSquare, CheckCircle, Search, DollarSign, LayoutDashboard, Clock, Gavel, User, AlertTriangle, Loader2, Menu, XCircle } from 'lucide-react';
+import { ShieldAlert, MessageSquare, CheckCircle, Search, DollarSign, LayoutDashboard, Clock, Gavel, User, AlertTriangle, Loader2, Menu, XCircle, Send } from 'lucide-react';
 import Link from 'next/link';
 
 // --- COMPONENTE: VISTA GENERAL (DASHBOARD) ---
 const GeneralDashboard = ({ stats, agreements, loading, error }: any) => {
   if (error) return (
-      <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center gap-3">
+      <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center gap-3 animate-fade-in">
           <XCircle size={24} />
           <div>
               <p className="font-bold">Error cargando datos:</p>
@@ -93,35 +93,37 @@ const GeneralDashboard = ({ stats, agreements, loading, error }: any) => {
   );
 };
 
-// --- COMPONENTE: PANEL DE DISPUTAS (RESPONSIVE) ---
+// --- COMPONENTE: PANEL DE DISPUTAS (CON SENTENCIA) ---
 const DisputesPanel = () => {
     const [disputes, setDisputes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [resolving, setResolving] = useState(false); // Estado para el botón de carga
     const [error, setError] = useState<string | null>(null);
     const [selectedDispute, setSelectedDispute] = useState<any>(null);
     const detailRef = useRef<HTMLDivElement>(null);
 
-    // 1. Cargar Disputas Reales
+    // 1. Cargar Disputas
     useEffect(() => {
         const fetchDisputes = async () => {
-            // Intentamos cargar las disputas con todas sus relaciones
-            // NOTA: Aquí NO pedimos 'email' para evitar errores, solo datos públicos
             const { data, error } = await supabase
                 .from('disputes')
                 .select(`
                     *,
                     agreement:agreements (
+                        id,
                         total_amount,
+                        application_id,
                         application:applications (
-                            campaign:campaigns(brand:profiles(full_name)),
-                            influencer:profiles(username, full_name)
+                            id,
+                            campaign:campaigns(brand_id, brand:profiles(full_name)),
+                            influencer:profiles(id, username, full_name)
                         )
                     )
                 `)
                 .order('created_at', { ascending: false });
 
             if (error) {
-                console.error("Error fetching disputes:", error);
+                console.error("Error disputes:", error);
                 setError(error.message);
             } else {
                 setDisputes(data || []);
@@ -139,11 +141,20 @@ const DisputesPanel = () => {
         }, 100);
     };
 
+    // 2. LÓGICA DEL JUEZ (Resolución + Notificación)
     const resolveDispute = async (resolutionType: 'refunded' | 'released') => {
-        if (!selectedDispute) return;
-        if (!confirm(`¿Confirmar veredicto: ${resolutionType === 'refunded' ? 'REEMBOLSO' : 'LIBERADO'}?`)) return;
+        if (!selectedDispute || resolving) return;
+        
+        const actionText = resolutionType === 'refunded' ? 'REEMBOLSAR A MARCA' : 'PAGAR A INFLUENCER';
+        if (!confirm(`⚠️ DECISIÓN FINAL\n\n¿Estás seguro de fallar a favor de ${resolutionType === 'refunded' ? 'la MARCA' : 'el INFLUENCER'}?\n\nEsta acción es irreversible.`)) return;
+
+        setResolving(true);
 
         try {
+            const adminUser = (await supabase.auth.getUser()).data.user;
+            if (!adminUser) throw new Error("Sesión expirada");
+
+            // A. Actualizar estado de la Disputa
             const { error: disputeError } = await supabase
                 .from('disputes')
                 .update({ status: resolutionType })
@@ -151,6 +162,7 @@ const DisputesPanel = () => {
 
             if (disputeError) throw disputeError;
 
+            // B. Actualizar el Contrato (Mover el dinero)
             const { error: agreementError } = await supabase
                 .from('agreements')
                 .update({ payment_status: resolutionType }) 
@@ -158,25 +170,42 @@ const DisputesPanel = () => {
 
             if (agreementError) throw agreementError;
 
-            alert('✅ Veredicto registrado.');
+            // C. Actualizar estado de la Postulación (Para cerrar el ciclo visual)
+            const finalAppStatus = resolutionType === 'refunded' ? 'cancelled' : 'completed';
+            await supabase.from('applications').update({ status: finalAppStatus }).eq('id', selectedDispute.agreement.application_id);
+
+            // D. NOTIFICAR EN EL CHAT (La Sentencia) ⚖️
+            const sentenceMessage = resolutionType === 'refunded' 
+                ? `⚖️ [SENTENCIA] El administrador ha fallado a favor de la MARCA.\nSe ha ordenado el reembolso total de los fondos.\nEl contrato ha sido cancelado.`
+                : `⚖️ [SENTENCIA] El administrador ha fallado a favor del INFLUENCER.\nSe ha validado el trabajo entregado.\nLos fondos han sido liberados.`;
+
+            await supabase.from('messages').insert({
+                application_id: selectedDispute.agreement.application_id,
+                sender_id: adminUser.id,
+                content: sentenceMessage
+            });
+
+            alert(`✅ Veredicto Ejecutado: ${actionText}`);
             
+            // Actualizar UI localmente
             setDisputes(prev => prev.map(d => d.id === selectedDispute.id ? { ...d, status: resolutionType } : d));
             setSelectedDispute({ ...selectedDispute, status: resolutionType });
 
         } catch (error: any) {
             console.error(error);
-            alert('Error: ' + error.message);
+            alert('Error crítico: ' + error.message);
+        } finally {
+            setResolving(false);
         }
     };
 
-    if (loading) return <div className="p-10 text-center text-slate-400">Cargando casos...</div>;
+    if (loading) return <div className="p-10 text-center text-slate-400">Cargando la corte...</div>;
     
     if (error) return (
         <div className="p-10 text-center">
             <div className="bg-red-50 text-red-600 p-6 rounded-xl border border-red-200 inline-block text-left">
                 <h3 className="font-bold flex items-center gap-2 mb-2"><XCircle/> Error Técnico</h3>
                 <p className="font-mono text-sm">{error}</p>
-                <p className="text-xs mt-4 text-red-400">Intenta recargar la página o revisa la consola.</p>
             </div>
         </div>
     );
@@ -184,8 +213,8 @@ const DisputesPanel = () => {
     if (disputes.length === 0) return (
         <div className="p-10 text-center bg-white rounded-2xl border border-dashed border-slate-300">
             <CheckCircle className="mx-auto text-green-500 mb-2" size={40}/>
-            <h3 className="text-lg font-bold text-slate-800">Todo tranquilo</h3>
-            <p className="text-slate-500">No hay disputas abiertas.</p>
+            <h3 className="text-lg font-bold text-slate-800">Sala Vacía</h3>
+            <p className="text-slate-500">No hay disputas pendientes de resolución.</p>
         </div>
     );
 
@@ -216,7 +245,7 @@ const DisputesPanel = () => {
                                 </span>
                                 <span className="text-slate-400 text-[10px]">{new Date(dispute.created_at).toLocaleDateString()}</span>
                             </div>
-                            <h4 className="font-bold text-slate-800 text-sm mb-1">{dispute.reason}</h4>
+                            <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-1">{dispute.reason}</h4>
                             
                             <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1 mb-2">
                                 <span className="font-semibold text-blue-600">
@@ -243,42 +272,53 @@ const DisputesPanel = () => {
                         <>
                             <div className="bg-slate-50 p-4 border-b border-slate-200">
                                 <h3 className="font-bold text-slate-800 text-sm">Caso #{selectedDispute.id.slice(0,8)}</h3>
-                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{selectedDispute.reason}</p>
+                                <p className="text-xs text-slate-500 mt-1 line-clamp-3 italic">"{selectedDispute.reason}"</p>
                             </div>
 
-                            <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-slate-50/30 flex flex-col justify-center items-center text-center">
+                            <div className="flex-1 p-6 overflow-y-auto bg-slate-50/30 flex flex-col justify-center items-center text-center">
+                                 {/* Aquí en un futuro podrías cargar los mensajes reales del chat */}
                                  <MessageSquare className="text-slate-200 mb-2" size={48}/>
-                                 <p className="text-slate-400 text-xs">Historial de chat <br/>marca vs influencer.</p>
-                                 <div className="bg-yellow-50 text-yellow-700 text-xs px-3 py-1 rounded-full mt-4 border border-yellow-100 font-bold">
-                                     En juego: ${selectedDispute.agreement?.total_amount?.toLocaleString('es-CL') || '0'}
+                                 <p className="text-slate-400 text-xs">Revisa la evidencia en el chat<br/>antes de decidir.</p>
+                                 
+                                 <Link 
+                                    href={`/dashboard/chat/${selectedDispute.agreement?.application_id}`}
+                                    className="mt-4 flex items-center gap-2 bg-white border border-slate-300 px-4 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 shadow-sm"
+                                 >
+                                     <Send size={12}/> Ir al Chat del Conflicto
+                                 </Link>
+
+                                 <div className="bg-yellow-50 text-yellow-700 text-xs px-3 py-1 rounded-full mt-6 border border-yellow-100 font-bold">
+                                     Monto en Custodia: ${selectedDispute.agreement?.total_amount?.toLocaleString('es-CL') || '0'}
                                  </div>
                             </div>
 
                             {selectedDispute.status === 'open' ? (
                                 <div className="p-4 bg-white border-t border-slate-200 space-y-3">
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase text-center">Dictar Sentencia</h4>
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase text-center">Dictar Sentencia Final</h4>
                                     <div className="grid grid-cols-2 gap-3">
                                         <button 
                                             onClick={() => resolveDispute('refunded')}
-                                            className="py-3 bg-red-50 text-red-600 font-bold rounded-xl border border-red-200 hover:bg-red-100 transition-colors flex flex-col items-center justify-center gap-1 active:scale-95"
+                                            disabled={resolving}
+                                            className="py-3 bg-red-50 text-red-600 font-bold rounded-xl border border-red-200 hover:bg-red-100 transition-colors flex flex-col items-center justify-center gap-1 active:scale-95 disabled:opacity-50"
                                         >
-                                            <User size={16}/> Reembolsar
-                                            <span className="text-[9px] font-normal opacity-70">A la Marca</span>
+                                            {resolving ? <Loader2 className="animate-spin" size={16}/> : <User size={16}/>}
+                                            {resolving ? 'Procesando...' : 'Reembolsar a Marca'}
                                         </button>
                                         <button 
                                             onClick={() => resolveDispute('released')}
-                                            className="py-3 bg-green-50 text-green-600 font-bold rounded-xl border border-green-200 hover:bg-green-100 transition-colors flex flex-col items-center justify-center gap-1 active:scale-95"
+                                            disabled={resolving}
+                                            className="py-3 bg-green-50 text-green-600 font-bold rounded-xl border border-green-200 hover:bg-green-100 transition-colors flex flex-col items-center justify-center gap-1 active:scale-95 disabled:opacity-50"
                                         >
-                                            <CheckCircle size={16}/> Pagar
-                                            <span className="text-[9px] font-normal opacity-70">Al Influencer</span>
+                                            {resolving ? <Loader2 className="animate-spin" size={16}/> : <CheckCircle size={16}/>}
+                                            {resolving ? 'Procesando...' : 'Pagar a Influencer'}
                                         </button>
                                     </div>
                                 </div>
                             ) : (
                                 <div className="p-6 bg-gray-50 border-t border-gray-200 text-center">
                                     <p className="text-gray-500 font-bold text-sm">Caso Cerrado</p>
-                                    <span className={`text-xs font-bold px-2 py-1 rounded-full mt-2 inline-block ${selectedDispute.status === 'refunded' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                                        {selectedDispute.status === 'refunded' ? 'Reembolsado a Marca' : 'Pagado a Influencer'}
+                                    <span className={`text-xs font-bold px-3 py-1 rounded-full mt-2 inline-block ${selectedDispute.status === 'refunded' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                        {selectedDispute.status === 'refunded' ? 'Sentencia: Reembolso a Marca' : 'Sentencia: Pago a Influencer'}
                                     </span>
                                 </div>
                             )}
@@ -291,7 +331,7 @@ const DisputesPanel = () => {
 };
 
 
-// --- PÁGINA PRINCIPAL ADMIN (LAYOUT RESPONSIVE) ---
+// --- PÁGINA PRINCIPAL ADMIN ---
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'disputes'>('dashboard');
   const [agreements, setAgreements] = useState<any[]>([]);
@@ -301,7 +341,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     const fetchAdminData = async () => {
-      // ⚠️ CORRECCIÓN AQUÍ: Quitamos 'email' de la consulta porque no existe en la tabla profiles
+      // Pedimos datos seguros (sin email privado)
       const { data, error } = await supabase
         .from('agreements')
         .select(`
@@ -331,7 +371,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
         
-        {/* SIDEBAR (SOLO DESKTOP) */}
+        {/* SIDEBAR (DESKTOP) */}
         <aside className="w-64 bg-slate-900 text-white hidden md:flex flex-col sticky top-0 h-screen">
             <div className="p-8">
                 <h2 className="text-2xl font-black tracking-tighter flex items-center gap-2">
@@ -365,7 +405,7 @@ export default function AdminPage() {
             </div>
         </aside>
 
-        {/* BOTTOM NAVBAR (SOLO MÓVIL) */}
+        {/* BOTTOM NAV (MOBILE) */}
         <div className="md:hidden fixed bottom-0 left-0 w-full bg-slate-900 text-white z-50 flex justify-around p-3 border-t border-slate-800 shadow-2xl">
             <button 
                 onClick={() => setActiveTab('dashboard')}
@@ -381,10 +421,6 @@ export default function AdminPage() {
                 <Gavel size={20} />
                 <span className="text-[10px] font-bold">Disputas</span>
             </button>
-             <Link href="/dashboard" className="flex flex-col items-center gap-1 p-2 text-slate-400">
-                <User size={20} />
-                <span className="text-[10px] font-bold">Salir</span>
-            </Link>
         </div>
 
         {/* CONTENIDO PRINCIPAL */}

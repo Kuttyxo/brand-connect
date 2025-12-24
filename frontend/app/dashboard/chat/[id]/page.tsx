@@ -78,10 +78,10 @@ export default function ChatPage() {
         
         await fetchMessages();
 
-        // --- SUSCRIPCIÓN REALTIME MEJORADA ---
-        // Usamos un canal único por ID para evitar cruces
+        // --- SUSCRIPCIÓN REALTIME DOBLE (MENSAJES + ESTADO) ---
         channel = supabase
           .channel(`chat:${id}`) 
+          // A. Escuchar Mensajes Nuevos
           .on(
             'postgres_changes', 
             { 
@@ -91,15 +91,25 @@ export default function ChatPage() {
               filter: `application_id=eq.${id}` 
             }, 
             (payload) => {
-              // Agregamos el mensaje nuevo instantáneamente
               setMessages((current) => [...current, payload.new]);
             }
           )
-          .subscribe((status) => {
-             if (status === 'SUBSCRIBED') {
-                console.log("✅ Conectado al chat en vivo");
-             }
-          });
+          // B. Escuchar Cambios de Estado (ESTO ES LO NUEVO) 🚨
+          // Cuando el Admin cambia el estado a 'cancelled' o 'completed', esto lo detecta.
+          .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'applications',
+                filter: `id=eq.${id}`
+            },
+            (payload) => {
+                console.log("Estado actualizado:", payload.new.status);
+                setAppStatus(payload.new.status); // Actualiza la UI instantáneamente
+            }
+          )
+          .subscribe();
 
       } catch (err: any) {
           console.error("Error cargando chat:", err);
@@ -117,7 +127,7 @@ export default function ChatPage() {
     };
   }, [id]);
 
-  // 2. Auto-scroll al fondo cuando llegan mensajes
+  // 2. Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -138,9 +148,8 @@ export default function ChatPage() {
     if (!newMessage.trim() || !userId) return;
     
     const text = newMessage;
-    setNewMessage(''); // Limpiar input inmediatamente (Optimistic UI)
+    setNewMessage(''); 
 
-    // Enviar a la base de datos
     const { error } = await supabase
         .from('messages')
         .insert({ 
@@ -151,7 +160,7 @@ export default function ChatPage() {
 
     if (error) {
         alert("Error al enviar mensaje");
-        setNewMessage(text); // Restaurar si falló
+        setNewMessage(text);
     }
   };
   
@@ -187,8 +196,13 @@ export default function ChatPage() {
                 <h2 className="font-bold text-gray-800 leading-tight">{otherUser?.full_name || 'Usuario'}</h2>
                 
                 {appStatus === 'disputed' && <p className="text-xs text-gray-800 font-black flex items-center gap-1"><ShieldAlert size={10}/> EN DISPUTA</p>}
-                {appStatus === 'cancelled' && <p className="text-xs text-red-600 font-black flex items-center gap-1"><AlertTriangle size={10}/> CANCELADO</p>}
-                {appStatus === 'completed' && <p className="text-xs text-green-600 font-black flex items-center gap-1"><CheckCircle size={10}/> FINALIZADO</p>}
+                {appStatus === 'cancelled' && <p className="text-xs text-red-600 font-black flex items-center gap-1 animate-pulse"><AlertTriangle size={10}/> CANCELADO</p>}
+                {appStatus === 'completed' && <p className="text-xs text-green-600 font-black flex items-center gap-1 animate-pulse"><CheckCircle size={10}/> FINALIZADO</p>}
+                
+                {/* Fallbacks visuales para otros estados */}
+                {appStatus === 'hired' && <p className="text-xs text-blue-600 font-bold">Contratado</p>}
+                {appStatus === 'review' && <p className="text-xs text-purple-600 font-bold">En Revisión</p>}
+
             </div>
             </div>
         </div>
