@@ -22,7 +22,17 @@ export default function DisputeModal({ applicationId, onClose, onDisputeRaised }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No autenticado");
 
-      // 1. Marcar como DISPUTA
+      // PASO 0: Obtener el ID del Acuerdo (Agreement)
+      // La tabla de disputas necesita el 'agreement_id', no el 'application_id'
+      const { data: agreementData, error: fetchError } = await supabase
+        .from('agreements')
+        .select('id')
+        .eq('application_id', applicationId)
+        .single();
+
+      if (fetchError || !agreementData) throw new Error("No se encontró el contrato asociado.");
+
+      // 1. Marcar como DISPUTA en la tabla 'applications'
       const { error: appError } = await supabase
         .from('applications')
         .update({ status: 'disputed' })
@@ -30,15 +40,29 @@ export default function DisputeModal({ applicationId, onClose, onDisputeRaised }
 
       if (appError) throw appError;
 
-      // 2. Marcar dinero como RETENIDO (Held)
+      // 2. Marcar dinero como RETENIDO (Held) en 'agreements'
       const { error: agreeError } = await supabase
         .from('agreements')
         .update({ payment_status: 'held' })
-        .eq('application_id', applicationId);
+        .eq('id', agreementData.id);
         
       if (agreeError) throw agreeError;
 
-      // 3. Notificar en el chat
+      // 3. --- NUEVO: CREAR EL REGISTRO EN LA TABLA DISPUTES ---
+      // Esto es lo que faltaba para que aparezca en el Admin Panel
+      const { error: disputeError } = await supabase
+        .from('disputes')
+        .insert({
+            agreement_id: agreementData.id,
+            raised_by: user.id,
+            reason: reason,
+            status: 'open'
+        });
+
+      if (disputeError) throw disputeError;
+      // --------------------------------------------------------
+
+      // 4. Notificar en el chat
       await supabase.from('messages').insert({
         application_id: applicationId,
         sender_id: user.id,

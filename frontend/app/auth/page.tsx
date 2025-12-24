@@ -25,7 +25,7 @@ function AuthForm() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-const handleAuth = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     
@@ -46,14 +46,43 @@ const handleAuth = async (e: React.FormEvent) => {
 
         // --- DETECCIÓN DE ADMIN VIP 🕵️‍♂️ ---
         if (data.user?.email === ADMIN_EMAIL) {
-            router.replace('/admin'); // Usamos 'replace' en vez de 'push'
+            router.replace('/admin'); 
         } else {
             router.replace('/dashboard'); 
         }
 
       } else {
-        // ... (El código de Registro déjalo igual, pero agrega router.refresh() si quieres)
-        // ...
+        // --- REGISTRO (RESTAURADO) ---
+        const displayName = role === 'brand' ? brandName : socialHandle;
+
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { 
+              role: role,
+              full_name: displayName, 
+              username: role === 'influencer' 
+                ? (socialHandle.startsWith('@') ? socialHandle : `@${socialHandle}`) 
+                : null 
+            }
+          }
+        });
+
+        if (error) throw error;
+        
+        alert('¡Cuenta creada con éxito!');
+
+        // 🛠️ FIX TAMBIÉN PARA REGISTRO
+        // (A veces Supabase loguea automáticamente tras registro, esto ayuda a que el Middleware lo detecte)
+        router.refresh();
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        if (email === ADMIN_EMAIL) {
+             router.replace('/admin');
+        } else {
+             router.replace('/dashboard');
+        }
       }
 
     } catch (error: any) {
