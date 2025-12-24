@@ -206,18 +206,38 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          {/* Card Ganancias */}
-          <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all group">
-            <div className="flex justify-between mb-6">
-                <h3 className="text-slate-500 font-bold uppercase tracking-wider text-sm">Ganancias</h3>
-                <div className="p-3 bg-green-100 text-green-600 rounded-2xl group-hover:scale-110 transition-transform"><DollarSign size={24}/></div>
+{/* Card Ganancias (Ahora es un LINK a la Billetera) 💰 */}
+          <Link href="/dashboard/wallet" className="block group">
+            <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 hover:border-[var(--color-brand-orange)] transition-all cursor-pointer relative overflow-hidden h-full">
+                
+                {/* Indicador visual de click (Flecha en la esquina) */}
+                <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-brand-orange)]">
+                    <ArrowRight size={24} className="-rotate-45"/>
+                </div>
+
+                <div className="flex justify-between mb-6">
+                    <h3 className="text-slate-500 font-bold uppercase tracking-wider text-sm group-hover:text-[var(--color-brand-orange)] transition-colors">Ganancias</h3>
+                    <div className="p-3 bg-green-100 text-green-600 rounded-2xl group-hover:scale-110 transition-transform"><DollarSign size={24}/></div>
+                </div>
+                
+                <p className="text-4xl font-black text-[var(--color-brand-dark)] truncate" title={formatMoney(stats.earnings)}>
+                    {formatMoney(stats.earnings)}
+                </p>
+                
+                <div className="flex flex-wrap items-center gap-2 mt-4">
+                    <span className="text-xs font-bold text-green-700 bg-green-100/80 px-3 py-1 rounded-full">Disponible</span>
+                    {stats.escrow > 0 && (
+                        <span className="text-xs font-bold text-orange-700 bg-orange-100/80 px-3 py-1 rounded-full flex items-center gap-1 animate-pulse" title="Dinero en custodia">
+                            <Clock size={12}/> +{formatMoney(stats.escrow)}
+                        </span>
+                    )}
+                </div>
+
+                <p className="text-xs text-gray-400 mt-6 font-bold group-hover:text-[var(--color-brand-orange)] transition-colors flex items-center gap-1">
+                    Ver Billetera y Retirar <ArrowRight size={12}/>
+                </p>
             </div>
-            <p className="text-4xl font-black text-[var(--color-brand-dark)] truncate" title={formatMoney(stats.earnings)}>{formatMoney(stats.earnings)}</p>
-            <div className="flex items-center gap-2 mt-4">
-                <span className="text-xs font-bold text-green-700 bg-green-100/80 px-3 py-1 rounded-full">Disponible</span>
-                {stats.escrow > 0 && (<span className="text-xs font-bold text-orange-700 bg-orange-100/80 px-3 py-1 rounded-full flex items-center gap-1 animate-pulse" title="Dinero en custodia"><Clock size={12}/> +{formatMoney(stats.escrow)}</span>)}
-            </div>
-          </div>
+          </Link>
           {/* Card Seguidores */}
           <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all group">
             <div className="flex justify-between mb-6">

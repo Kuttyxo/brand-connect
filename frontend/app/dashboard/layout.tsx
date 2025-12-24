@@ -1,9 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { LayoutDashboard, Users, ShoppingBag, Settings, LogOut, Menu, X, MessageSquare } from 'lucide-react';
+import { 
+  LayoutDashboard, Users, ShoppingBag, Settings, LogOut, 
+  Menu, X, MessageSquare, Wallet // Importamos Wallet
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 
@@ -15,6 +18,29 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [role, setRole] = useState<string | null>(null); // Estado para el rol
+  const [loading, setLoading] = useState(true);
+
+  // 1. Detectar Rol al cargar
+  useEffect(() => {
+    const getUserRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/auth');
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+        
+      setRole(data?.role || 'influencer');
+      setLoading(false);
+    };
+    getUserRole();
+  }, [router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -24,12 +50,47 @@ export default function DashboardLayout({
 
   const closeMenu = () => setIsMobileMenuOpen(false);
 
-  const getLinkClass = (path: string) => {
-    const isACtive = pathname === path;
-    return isACtive 
-? "flex items-center gap-3 px-4 py-3 text-[var(--color-brand-dark)] bg-gray-100 rounded-xl font-medium transition-colors" // Activo
-      : "flex items-center gap-3 px-4 py-3 text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)] rounded-xl font-medium transition-colors"; // Inactivo
-  }
+  // Definición Centralizada del Menú
+  const menuItems = [
+    { 
+      name: 'Inicio', 
+      href: '/dashboard', 
+      icon: LayoutDashboard,
+      show: true 
+    },
+    { 
+      name: 'Campañas', 
+      href: '/dashboard/campaigns', 
+      icon: ShoppingBag,
+      show: true 
+    },
+    { 
+      name: 'Billetera', 
+      href: '/dashboard/wallet', 
+      icon: Wallet,
+      show: role === 'influencer' // 💰 SOLO INFLUENCERS
+    },
+    { 
+      name: 'Mi Perfil', 
+      href: '/dashboard/profile', 
+      icon: Users,
+      show: true 
+    },
+    { 
+      name: 'Mensajes', 
+      href: '/dashboard/messages', 
+      icon: MessageSquare,
+      show: true 
+    },
+    { 
+      name: 'Configuración', 
+      href: '/dashboard/settings', 
+      icon: Settings,
+      show: true 
+    },
+  ];
+
+  if (loading) return null; // O un spinner simple
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -50,75 +111,26 @@ export default function DashboardLayout({
           </Link>
         </div>
 
-{/* Navegación Desktop Dinámica */}
-<nav className="flex-1 p-4 space-y-2">
-  
-  {/* Botón INICIO */}
-  <Link 
-    href="/dashboard" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-      pathname === '/dashboard' 
-        ? 'text-[var(--color-brand-dark)] bg-gray-100' // Estilo ACTIVO
-        : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]' // Estilo INACTIVO
-    }`}
-  >
-    <LayoutDashboard size={20} />
-    Inicio
-  </Link>
-
-  {/* Botón CAMPAÑAS */}
-  <Link 
-    href="/dashboard/campaigns" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-      pathname === '/dashboard/campaigns' 
-        ? 'text-[var(--color-brand-dark)] bg-gray-100' 
-        : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]'
-    }`}
-  >
-    <ShoppingBag size={20} />
-    Campañas
-  </Link>
-
-  {/* Botón MI PERFIL */}
-  <Link 
-    href="/dashboard/profile" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-      pathname === '/dashboard/profile' 
-        ? 'text-[var(--color-brand-dark)] bg-gray-100' 
-        : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]'
-    }`}
-  >
-    <Users size={20} />
-    Mi Perfil
-  </Link>
-
-{/* --- MENSAJES --- */}
-<Link 
-  href="/dashboard/messages" 
-  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-    pathname === '/dashboard/messages' 
-      ? 'text-[var(--color-brand-dark)] bg-gray-100' 
-      : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]'
-  }`}
->
-  <MessageSquare size={20} />
-  Mensajes
-</Link>
-
-  {/* Botón CONFIGURACIÓN */}
-  <Link 
-    href="/dashboard/settings" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-      pathname === '/dashboard/settings' 
-        ? 'text-[var(--color-brand-dark)] bg-gray-100' 
-        : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]'
-    }`}
-  >
-    <Settings size={20} />
-    Configuración
-  </Link>
-
-</nav>
+        {/* Navegación Desktop */}
+        <nav className="flex-1 p-4 space-y-2">
+          {menuItems.filter(item => item.show).map((item) => {
+             const isActive = pathname === item.href;
+             return (
+                <Link 
+                    key={item.href} 
+                    href={item.href} 
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+                    isActive 
+                        ? 'text-[var(--color-brand-dark)] bg-gray-100' 
+                        : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--color-brand-orange)]'
+                    }`}
+                >
+                    <item.icon size={20} />
+                    {item.name}
+                </Link>
+             );
+          })}
+        </nav>
 
         {/* Botón Salir Desktop */}
         <div className="p-4 border-t border-gray-100">
@@ -137,12 +149,12 @@ export default function DashboardLayout({
         <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 md:hidden sticky top-0 z-50 relative">
            <Link href="/dashboard" onClick={closeMenu}>
              <Image 
-                src="/brand-logo.png" 
-                alt="BrandConnect" 
-                width={120} 
-                height={30} 
-                className="h-6 w-auto object-contain"
-              />
+               src="/brand-logo.png" 
+               alt="BrandConnect" 
+               width={120} 
+               height={30} 
+               className="h-6 w-auto object-contain"
+             />
            </Link>
 
            <button 
@@ -150,7 +162,6 @@ export default function DashboardLayout({
              className="text-[var(--color-brand-dark)] p-2 hover:bg-gray-100 rounded-lg transition-colors z-50 relative"
              aria-label="Toggle Menu"
            >
-             {/* Transición suave entre iconos */}
              <div className="relative w-6 h-6">
                 <Menu size={24} className={`absolute transition-all duration-300 ${isMobileMenuOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'}`} />
                 <X size={24} className={`absolute transition-all duration-300 ${isMobileMenuOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-50'}`} />
@@ -158,78 +169,39 @@ export default function DashboardLayout({
            </button>
         </header>
 
-        {/* --- MENÚ DESPLEGABLE MÓVIL CON TRANSICIÓN --- */}
-        {/* Usamos clases dinámicas para la transición de altura y opacidad */}
+        {/* --- MENÚ DESPLEGABLE MÓVIL --- */}
         <div 
           className={`md:hidden absolute top-16 left-0 w-full z-40 bg-white shadow-xl overflow-hidden transition-all duration-300 ease-in-out
             ${isMobileMenuOpen ? 'max-h-[calc(100vh-4rem)] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}
           `}
         >
-<nav className="flex flex-col p-4 space-y-2 border-b border-gray-200">
-  
-  {/* INICIO */}
-  <Link 
-    onClick={closeMenu} 
-    href="/dashboard" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-      pathname === '/dashboard'
-        ? 'text-[var(--color-brand-dark)] bg-gray-50' // Estilo ACTIVO
-        : 'text-gray-600 hover:bg-gray-50'            // Estilo INACTIVO
-    }`}
-  >
-    <LayoutDashboard size={20} />
-    Inicio
-  </Link>
-
-  {/* CAMPAÑAS */}
-  <Link 
-    onClick={closeMenu} 
-    href="/dashboard/campaigns" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-      pathname === '/dashboard/campaigns'
-        ? 'text-[var(--color-brand-dark)] bg-gray-50'
-        : 'text-gray-600 hover:bg-gray-50'
-    }`}
-  >
-    <ShoppingBag size={20} />
-    Campañas
-  </Link>
-
-  {/* MI PERFIL */}
-  <Link 
-    onClick={closeMenu} 
-    href="/dashboard/profile" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-      pathname === '/dashboard/profile'
-        ? 'text-[var(--color-brand-dark)] bg-gray-50'
-        : 'text-gray-600 hover:bg-gray-50'
-    }`}
-  >
-    <Users size={20} />
-    Mi Perfil
-  </Link>
-
-  {/* CONFIGURACIÓN */}
-  <Link 
-    onClick={closeMenu} 
-    href="/dashboard/settings" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-      pathname === '/dashboard/settings'
-        ? 'text-[var(--color-brand-dark)] bg-gray-50'
-        : 'text-gray-600 hover:bg-gray-50'
-    }`}
-  >
-    <Settings size={20} />
-    Configuración
-  </Link>
-  
-  <div className="h-px bg-gray-100 my-2"></div>
-  
-  <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium w-full text-left">
-    <LogOut size={20} />
-    Cerrar Sesión
-  </button>
-</nav>
+            <nav className="flex flex-col p-4 space-y-2 border-b border-gray-200">
+              {menuItems.filter(item => item.show).map((item) => {
+                 const isActive = pathname === item.href;
+                 return (
+                    <Link 
+                        key={item.href} 
+                        href={item.href}
+                        onClick={closeMenu}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+                        isActive 
+                            ? 'text-[var(--color-brand-dark)] bg-gray-50' 
+                            : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                    >
+                        <item.icon size={20} />
+                        {item.name}
+                    </Link>
+                 );
+              })}
+              
+              <div className="h-px bg-gray-100 my-2"></div>
+              
+              <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium w-full text-left">
+                <LogOut size={20} />
+                Cerrar Sesión
+              </button>
+            </nav>
         </div>
         
         {/* Contenido de la página */}
