@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link'; 
-import { Users, DollarSign, Briefcase, Star, Activity, LoaderCircle, Zap, Crown, ArrowRight, Plus, Search } from 'lucide-react'; 
+import { Users, DollarSign, Briefcase, Star, Activity, LoaderCircle, Zap, Crown, ArrowRight, Plus, Search, Clock } from 'lucide-react'; 
 import BenefitsModal from '@/components/BenefitsModal';
 
 type Profile = {
@@ -16,14 +16,14 @@ type Profile = {
   is_verified: boolean;
 };
 
-// --- CONFIGURACIÓN DE NIVELES (CORREGIDO: Colores explícitos) ---
+// --- CONFIGURACIÓN DE NIVELES ---
 const LEVELS = {
   STARTER: { 
     min: 0, 
     name: 'Starter', 
     color: 'text-yellow-600', 
     bg: 'bg-yellow-50', 
-    barColor: 'bg-yellow-600', // <--- CLASE EXPLÍCITA AQUÍ
+    barColor: 'bg-yellow-600', 
     icon: Star, 
     next: 5 
   },
@@ -32,7 +32,7 @@ const LEVELS = {
     name: 'Pro Creator', 
     color: 'text-blue-600', 
     bg: 'bg-blue-50', 
-    barColor: 'bg-blue-600', // <--- CLASE EXPLÍCITA AQUÍ
+    barColor: 'bg-blue-600', 
     icon: Zap, 
     next: 20 
   },
@@ -41,7 +41,7 @@ const LEVELS = {
     name: 'Legend', 
     color: 'text-purple-600', 
     bg: 'bg-purple-50', 
-    barColor: 'bg-purple-600', // <--- CLASE EXPLÍCITA AQUÍ
+    barColor: 'bg-purple-600', 
     icon: Crown, 
     next: 100 
   }
@@ -56,13 +56,14 @@ export default function DashboardPage() {
     totalBudget: 0,
     candidates: 0,
     completedCampaigns: 0, 
-    earnings: 0 
+    earnings: 0,
+    escrow: 0 // Dinero "En camino" (Held)
   });
 
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Calcular Nivel Actual
+  // Calcular Nivel
   const getCurrentLevel = (count: number) => {
     if (count >= LEVELS.ELITE.min) return LEVELS.ELITE;
     if (count >= LEVELS.PRO.min) return LEVELS.PRO;
@@ -71,15 +72,15 @@ export default function DashboardPage() {
 
   const level = getCurrentLevel(stats.completedCampaigns);
   
-  // Calcular Progreso RELATIVO
+  // Calcular Progreso
   const range = level.next - level.min;
   const currentInLevel = stats.completedCampaigns - level.min;
   const progress = Math.min(100, Math.max(0, (currentInLevel / range) * 100));
-  
   const jobsToNext = level.next - stats.completedCampaigns;
 
   const fetchDashboardData = useCallback(async (userId: string) => {
     try {
+      // 1. Perfil
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -88,21 +89,16 @@ export default function DashboardPage() {
 
       if (profileError) throw profileError;
       
-      setProfile((prev) => {
-          if (JSON.stringify(prev) !== JSON.stringify(profileData)) {
-              return profileData;
-          }
-          return prev;
-      });
+      setProfile((prev) => JSON.stringify(prev) !== JSON.stringify(profileData) ? profileData : prev);
 
       if (profileData.role === 'brand') {
-          // --- LÓGICA MARCA ---
-          const { data: campaigns, error: campaignsError } = await supabase
+          // --- MARCA ---
+          const { data: campaigns } = await supabase
             .from('campaigns')
             .select('id, budget, status') 
             .eq('brand_id', userId);
 
-          if (!campaignsError && campaigns) {
+          if (campaigns) {
               const active = campaigns.filter(c => c.status === 'open').length;
               const total = campaigns.reduce((sum, c) => sum + (c.budget || 0), 0);
               
@@ -121,35 +117,59 @@ export default function DashboardPage() {
                   totalBudget: total,
                   candidates: candidatesCount,
                   completedCampaigns: 0,
-                  earnings: 0
+                  earnings: 0,
+                  escrow: 0
               });
           }
       } else {
-          // --- LÓGICA INFLUENCER ---
+          // --- INFLUENCER (FINANZAS REALES) ---
+          
+          // A. Contar Activas
           const { count: activeCount } = await supabase
             .from('applications')
             .select('*', { count: 'exact', head: true })
             .eq('influencer_id', userId)
             .in('status', ['pending', 'accepted', 'hired', 'review']);
 
+          // B. Contar Completadas
           const { count: completedCount } = await supabase
             .from('applications')
             .select('*', { count: 'exact', head: true })
             .eq('influencer_id', userId)
             .eq('status', 'completed');
 
+          // C. Calcular Ganancias REALES
+          // Usamos 'applications!inner' para asegurar la relación correcta
           const { data: myAgreements } = await supabase
             .from('agreements')
-            .select('payout_amount, application!inner(influencer_id)')
-            .eq('application.influencer_id', userId) 
-            .eq('payment_status', 'released');
+            .select(`
+                payout_amount, 
+                payment_status,
+                applications!inner(influencer_id) 
+            `)
+            .eq('applications.influencer_id', userId)
+            .in('payment_status', ['released', 'held']); // Traemos Pagado y En Custodia
 
-          const totalEarnings = myAgreements?.reduce((acc, curr) => acc + (curr.payout_amount || 0), 0) || 0;
+          let realEarnings = 0;
+          let moneyInEscrow = 0;
+
+          if (myAgreements) {
+            myAgreements.forEach((agreement: any) => {
+                const amount = Number(agreement.payout_amount) || 0;
+                
+                if (agreement.payment_status === 'released') {
+                    realEarnings += amount; // Dinero Tuyo
+                } else if (agreement.payment_status === 'held') {
+                    moneyInEscrow += amount; // Dinero en Camino
+                }
+            });
+          }
 
           setStats({
             activeCampaigns: activeCount || 0,
             completedCampaigns: completedCount || 0,
-            earnings: totalEarnings,
+            earnings: realEarnings,
+            escrow: moneyInEscrow,
             totalBudget: 0,
             candidates: 0
           });
@@ -162,8 +182,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let channelProfiles: any;
-    let channelCampaigns: any;
-    let pollingInterval: any; 
+    let channelApps: any;
+    let channelAgreements: any; // Escuchamos cambios en dinero
 
     const initDashboard = async () => {
       try {
@@ -176,34 +196,19 @@ export default function DashboardPage() {
         await fetchDashboardData(user.id);
         setLoading(false);
 
-        pollingInterval = setInterval(async () => {
-            await fetchDashboardData(user.id);
-        }, 4000);
-
-        channelProfiles = supabase
-          .channel('dashboard_profiles')
-          .on('postgres_changes', 
-            { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
-            () => fetchDashboardData(user.id)
-          )
-          .subscribe();
+        // Canales Realtime
+        channelProfiles = supabase.channel('dash_prof').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, () => fetchDashboardData(user.id)).subscribe();
 
         if (profile?.role === 'influencer') {
-             channelCampaigns = supabase
-              .channel('dashboard_apps')
-              .on('postgres_changes', 
-                { event: '*', schema: 'public', table: 'applications', filter: `influencer_id=eq.${user.id}` },
-                () => fetchDashboardData(user.id)
-              )
-              .subscribe();
+             // Escuchar cambios en postulaciones (Niveles)
+             channelApps = supabase.channel('dash_apps').on('postgres_changes', { event: '*', schema: 'public', table: 'applications', filter: `influencer_id=eq.${user.id}` }, () => fetchDashboardData(user.id)).subscribe();
+             
+             // Escuchar cambios en dinero (Ganancias)
+             // Nota: No podemos filtrar agreements por influencer_id directo (está en tabla hija), así que refrescamos con cualquier cambio en agreements y filtramos en fetch
+             channelAgreements = supabase.channel('dash_money').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'agreements' }, () => fetchDashboardData(user.id)).subscribe();
+             
         } else {
-             channelCampaigns = supabase
-              .channel('dashboard_campaigns')
-              .on('postgres_changes', 
-                { event: '*', schema: 'public', table: 'campaigns', filter: `brand_id=eq.${user.id}` },
-                () => fetchDashboardData(user.id)
-              )
-              .subscribe();
+             channelApps = supabase.channel('dash_camps').on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns', filter: `brand_id=eq.${user.id}` }, () => fetchDashboardData(user.id)).subscribe();
         }
 
       } catch (error) {
@@ -216,199 +221,131 @@ export default function DashboardPage() {
 
     return () => {
       if (channelProfiles) supabase.removeChannel(channelProfiles);
-      if (channelCampaigns) supabase.removeChannel(channelCampaigns);
-      if (pollingInterval) clearInterval(pollingInterval);
+      if (channelApps) supabase.removeChannel(channelApps);
+      if (channelAgreements) supabase.removeChannel(channelAgreements);
     };
   }, [router, fetchDashboardData, profile?.role]);
   
-  if (loading) {
-    return (
-      <div className="animate-pulse space-y-8 p-6">
-        <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="h-32 bg-gray-200 rounded-2xl"></div>
-          <div className="h-32 bg-gray-200 rounded-2xl"></div>
-          <div className="h-32 bg-gray-200 rounded-2xl"></div>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-8 text-center animate-pulse">Cargando tu imperio...</div>;
 
   const isBrand = profile?.role === 'brand';
-
-  const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
-  };
+  const formatMoney = (amount: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
 
   return (
     <div className="space-y-6 md:space-y-8 animate-fade-in pb-20">
       
-      {/* ENCABEZADO RESPONSIVE */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <div className="w-full md:w-auto">
+        <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[var(--color-brand-dark)]">
             Hola, <span className="text-[var(--color-brand-orange)] capitalize">{profile?.full_name?.split(' ')[0] || 'Usuario'}</span> 👋
           </h1>
           <p className="text-gray-500 mt-1 text-sm md:text-base">
-            {isBrand 
-              ? 'Gestiona tus campañas y contratos.' 
-              : 'Aquí está el resumen de tu carrera.'}
+            {isBrand ? 'Gestiona tus campañas.' : 'Resumen de tu carrera.'}
           </p>
         </div>
         
-        <div className="w-full md:w-auto flex flex-col sm:flex-row gap-3">
+        <div className="w-full md:w-auto">
             {isBrand ? (
-                <Link href="/create-campaign" className="w-full sm:w-auto justify-center bg-[var(--color-brand-orange)] text-white px-5 py-3 rounded-xl font-bold shadow-lg shadow-orange-900/10 hover:shadow-orange-200/50 active:scale-95 transition-all flex items-center gap-2">
+                <Link href="/create-campaign" className="btn-primary flex items-center justify-center gap-2 bg-[var(--color-brand-orange)] text-white px-5 py-3 rounded-xl font-bold shadow-lg shadow-orange-900/10 hover:shadow-orange-200/50">
                     <Plus size={20}/> Nueva Campaña
                 </Link>
             ) : (
-                <Link href="/dashboard/campaigns" className="w-full sm:w-auto justify-center bg-[var(--color-brand-dark)] text-white px-5 py-3 rounded-xl font-bold shadow-lg shadow-gray-900/10 hover:shadow-gray-200/50 active:scale-95 transition-all flex items-center gap-2">
+                <Link href="/dashboard/campaigns" className="btn-secondary flex items-center justify-center gap-2 bg-[var(--color-brand-dark)] text-white px-5 py-3 rounded-xl font-bold shadow-lg shadow-gray-900/10">
                     <Search size={20}/> Buscar Trabajo
                 </Link>
             )}
         </div>
       </div>
 
-      {/* --- CONTENIDO DINÁMICO --- */}
-      
+      {/* Stats Cards */}
       {isBrand ? (
-        // VISTA MARCA
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-          <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-500 font-medium text-sm md:text-base">Campañas Activas</h3>
-              <span className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Briefcase size={20}/></span>
-            </div>
-            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">{stats.activeCampaigns}</p>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex justify-between mb-4"><h3 className="text-gray-500 font-medium">Activas</h3><Briefcase className="text-purple-600"/></div>
+            <p className="text-3xl font-black text-purple-900">{stats.activeCampaigns}</p>
           </div>
-
-          <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-500 font-medium text-sm md:text-base">Inversión Total</h3>
-              <span className="p-2 bg-green-50 text-green-600 rounded-lg"><DollarSign size={20}/></span>
-            </div>
-            <p className="text-2xl md:text-3xl font-extrabold text-[var(--color-brand-dark)] truncate" title={formatMoney(stats.totalBudget)}>
-                {formatMoney(stats.totalBudget)}
-            </p>
-            <span className="text-xs md:text-sm text-gray-400 font-medium">Comprometido</span>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex justify-between mb-4"><h3 className="text-gray-500 font-medium">Inversión</h3><DollarSign className="text-green-600"/></div>
+            <p className="text-3xl font-black text-green-900 truncate">{formatMoney(stats.totalBudget)}</p>
           </div>
-
-          <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-500 font-medium text-sm md:text-base">Postulaciones</h3>
-              <span className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Users size={20}/></span>
-            </div>
-            <p className="text-3xl font-extrabold text-[var(--color-brand-dark)]">{stats.candidates}</p>
-            <Link href="/dashboard/candidates" className="text-xs md:text-sm text-blue-500 font-medium cursor-pointer hover:underline block mt-1">
-                Ver candidatos →
-            </Link>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex justify-between mb-4"><h3 className="text-gray-500 font-medium">Candidatos</h3><Users className="text-blue-600"/></div>
+            <p className="text-3xl font-black text-blue-900">{stats.candidates}</p>
           </div>
         </div>
       ) : (
-        // VISTA INFLUENCER
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
 
-          {!profile?.is_verified && (
-            <div className="col-span-1 md:col-span-3 bg-yellow-50 border border-yellow-200 rounded-xl p-5 flex flex-col md:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-2">
-               <div className="p-3 bg-yellow-100 rounded-full text-yellow-600 shrink-0">
-                 <LoaderCircle size={28} className="animate-spin" />
-               </div>
-               <div className="text-center md:text-left">
-                 <h3 className="font-bold text-base md:text-lg text-yellow-800">Analizando perfil...</h3>
-                 <p className="text-yellow-700 text-xs md:text-sm mt-1">
-                   Escaneando <strong>{profile?.social_handle}</strong>. La página se actualizará sola.
-                 </p>
-               </div>
-            </div>
-          )}
-          
-          {/* CARD NIVEL (DINÁMICA + FIX COLOR) */}
-          <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative overflow-hidden group">
-            <div className={`absolute top-0 right-0 w-20 h-20 md:w-24 md:h-24 ${level.bg} rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110 opacity-50`}></div>
-            
-            <div className="flex items-center justify-between mb-2 relative z-10">
-              <h3 className="text-gray-500 font-medium text-sm md:text-base">Tu Nivel</h3>
-              <span className={`p-2 ${level.bg} ${level.color} rounded-lg`}><level.icon size={20}/></span>
-            </div>
-            
+          {/* CARD NIVEL */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden group">
+            <div className={`absolute top-0 right-0 w-24 h-24 ${level.bg} rounded-bl-full -mr-4 -mt-4 opacity-50 transition-transform group-hover:scale-110`}></div>
             <div className="relative z-10">
-                <p className={`text-2xl md:text-3xl font-extrabold ${level.color} mb-1`}>{level.name}</p>
-                
-                {/* Barra de Progreso */}
-                <div className="w-full bg-gray-100 rounded-full h-2 mt-3 mb-2 overflow-hidden relative">
-                    <div 
-                        className={`h-full rounded-full transition-all duration-1000 ease-out ${level.barColor}`} 
-                        style={{ width: `${progress}%` }}
-                    ></div>
-                </div>
-                
-                <p className="text-[10px] md:text-xs text-gray-400 mb-3 font-medium">
-                    {jobsToNext > 0 
-                        ? `Faltan ${jobsToNext} trabajos para subir.` 
-                        : '¡Nivel máximo alcanzado! 🚀'}
-                </p>
-
-                <button 
-                    onClick={() => setShowBenefits(true)}
-                    className="text-xs md:text-sm text-blue-500 font-medium cursor-pointer hover:underline flex items-center gap-1 p-1 -ml-1"
-                >
-                    Ver beneficios <ArrowRight size={14}/>
-                </button>
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-gray-500 font-medium">Nivel</h3>
+                <level.icon className={level.color} size={24}/>
+              </div>
+              <p className={`text-3xl font-black ${level.color} mb-1`}>{level.name}</p>
+              
+              <div className="w-full bg-gray-100 rounded-full h-2 my-3 overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-1000 ${level.barColor}`} style={{ width: `${progress}%` }}></div>
+              </div>
+              <p className="text-xs text-gray-400 mb-3">{jobsToNext > 0 ? `Faltan ${jobsToNext} trabajos.` : '¡Máximo nivel!'}</p>
+              <button onClick={() => setShowBenefits(true)} className="text-xs font-bold text-blue-500 hover:underline flex gap-1 items-center">Ver beneficios <ArrowRight size={12}/></button>
             </div>
           </div>
 
-          {/* CARD GANANCIAS */}
-          <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-500 font-medium text-sm md:text-base">Ganancias</h3>
-              <span className="p-2 bg-green-50 text-green-600 rounded-lg"><DollarSign size={20}/></span>
+          {/* CARD GANANCIAS (REALES) */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex justify-between mb-4">
+                <h3 className="text-gray-500 font-medium">Ganancias</h3>
+                <span className="p-2 bg-green-50 text-green-600 rounded-lg"><DollarSign size={20}/></span>
             </div>
-            <p className="text-2xl md:text-3xl font-extrabold text-[var(--color-brand-dark)] truncate" title={formatMoney(stats.earnings)}>
+            
+            <p className="text-3xl font-black text-[var(--color-brand-dark)] truncate" title={formatMoney(stats.earnings)}>
               {formatMoney(stats.earnings)}
             </p>
-            <span className="text-xs md:text-sm text-gray-400 font-medium">Acumulado total</span>
+            
+            <div className="flex items-center gap-2 mt-2">
+                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">Disponible</span>
+                
+                {/* Dinero en custodia (Held) */}
+                {stats.escrow > 0 && (
+                    <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full flex items-center gap-1" title="Dinero en custodia">
+                        <Clock size={10}/> +{formatMoney(stats.escrow)}
+                    </span>
+                )}
+            </div>
           </div>
 
           {/* CARD SEGUIDORES */}
-          <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-500 font-medium text-sm md:text-base">Seguidores</h3>
-              <span className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Users size={20}/></span>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex justify-between mb-4">
+                <h3 className="text-gray-500 font-medium">Seguidores</h3>
+                <span className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Users size={20}/></span>
             </div>
-            <p className="text-2xl md:text-3xl font-extrabold text-[var(--color-brand-dark)]">
+            <p className="text-3xl font-black text-[var(--color-brand-dark)]">
                 {profile?.followers_count?.toLocaleString() || 0}
             </p>
-            <span className="text-xs md:text-sm text-gray-400 font-medium">{profile?.social_handle}</span>
+            <span className="text-sm text-gray-400 font-medium">@{profile?.full_name || 'usuario'}</span>
           </div>
+
         </div>
       )}
 
-      {/* Footer Condicional */}
+      {/* Footer Call to Action */}
       {((isBrand && stats.activeCampaigns === 0) || (!isBrand && !profile?.is_verified)) && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8 text-center py-12 md:py-20 animate-fade-in mx-auto max-w-2xl">
-          <div className="w-12 h-12 md:w-16 md:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl md:text-3xl">
-            {isBrand ? '📢' : '🚀'}
-          </div>
-          <h3 className="text-lg md:text-xl font-bold text-[var(--color-brand-dark)]">
-            {isBrand ? 'Publica tu primera campaña' : '¡Estás listo para despegar!'}
-          </h3>
-          <p className="text-sm md:text-base text-gray-500 max-w-md mx-auto mt-2">
-            {isBrand 
-              ? 'Encuentra a los mejores micro-influencers para tu marca hoy mismo.'
-              : 'Completa tu perfil para que las marcas te encuentren más rápido.'}
-          </p>
-          
-          <Link href={isBrand ? '/create-campaign' : '/dashboard/profile/edit'}>
-            <button className="mt-6 px-6 py-3 bg-[var(--color-brand-dark)] text-white rounded-xl font-bold hover:bg-[var(--color-brand-orange)] transition-colors w-full sm:w-auto">
-              {isBrand ? 'Crear Campaña' : 'Completar Perfil'}
-            </button>
-          </Link>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center mt-8">
+            <h3 className="font-bold text-lg text-gray-800">
+                {isBrand ? '🚀 Lanza tu primera campaña' : '✨ Completa tu perfil'}
+            </h3>
+            <Link href={isBrand ? '/create-campaign' : '/dashboard/profile/edit'} className="inline-block mt-4 text-[var(--color-brand-orange)] font-bold hover:underline">
+                Empezar ahora →
+            </Link>
         </div>
       )}
 
-      {/* MODAL DE BENEFICIOS */}
       {showBenefits && <BenefitsModal onClose={() => setShowBenefits(false)} currentLevel={level.name} completed={stats.completedCampaigns} />}
-
     </div>
   );
 }
