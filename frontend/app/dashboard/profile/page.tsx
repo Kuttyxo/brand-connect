@@ -7,7 +7,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { 
   Edit3, MapPin, Instagram, Facebook, Globe, 
-  Share2, Hash, Briefcase, User 
+  Share2, Hash, Briefcase, User, Building2 
 } from 'lucide-react';
 
 type Profile = {
@@ -18,6 +18,7 @@ type Profile = {
   city: string;
   country: string;
   categories: string[];
+  website: string; // Nuevo campo importante
   instagram_handle: string; instagram_url: string;
   tiktok_handle: string; tiktok_url: string;
   facebook_handle: string; facebook_url: string;
@@ -46,12 +47,16 @@ export default function MyProfilePage() {
 
       if (data) {
         setProfile(data);
-        // Generar URL pública de la imagen si existe
         if (data.avatar_url) {
-          const { data: publicUrl } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(data.avatar_url);
-          setAvatarUrl(publicUrl.publicUrl);
+            // Si es URL completa (http...) úsala, si no, busca en storage
+            if (data.avatar_url.startsWith('http')) {
+                setAvatarUrl(data.avatar_url);
+            } else {
+                const { data: publicUrl } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(data.avatar_url);
+                setAvatarUrl(publicUrl.publicUrl);
+            }
         }
       }
       setLoading(false);
@@ -75,7 +80,6 @@ export default function MyProfilePage() {
     );
   }
 
-  // Si no hay datos, mostrar estado vacío
   if (!profile) return <div>No se encontró el perfil.</div>;
 
   const isBrand = profile.role === 'brand';
@@ -85,31 +89,26 @@ export default function MyProfilePage() {
       
       {/* 1. HEADER / BANNER */}
       <div className="relative mb-16">
-        {/* Fondo decorativo (Banner) */}
-        <div className="h-48 md:h-64 bg-gradient-to-r from-[var(--color-brand-dark)] to-[var(--color-brand-orange)] rounded-3xl shadow-md overflow-hidden relative">
+        <div className={`h-48 md:h-64 rounded-3xl shadow-md overflow-hidden relative ${isBrand ? 'bg-gradient-to-r from-slate-900 to-slate-800' : 'bg-gradient-to-r from-[var(--color-brand-dark)] to-[var(--color-brand-orange)]'}`}>
            <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
         </div>
 
-        {/* Tarjeta de Información Principal (Flotante) */}
         <div className="absolute -bottom-12 left-6 md:left-10 flex items-end gap-6">
-          {/* Avatar con borde grueso */}
-          <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-xl bg-white overflow-hidden">
+          <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-xl bg-white overflow-hidden flex items-center justify-center">
             {avatarUrl ? (
-              <Image 
+              <img 
                 src={avatarUrl} 
                 alt="Avatar" 
-                fill 
-                className="object-cover"
+                className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
-                <User size={64} />
+              <div className="text-gray-300">
+                {isBrand ? <Building2 size={64} /> : <User size={64} />}
               </div>
             )}
           </div>
         </div>
 
-        {/* Botón Editar (Posicionado estratégicamente) */}
         <div className="absolute -bottom-14 right-4 md:right-0 md:bottom-4 md:relative flex justify-end">
            <Link href="/dashboard/profile/edit">
              <button className="flex items-center gap-2 bg-white text-[var(--color-brand-dark)] px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg hover:bg-gray-50 transition-all border border-gray-100">
@@ -129,11 +128,12 @@ export default function MyProfilePage() {
           
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 flex items-center gap-2">
-              {profile.full_name || 'Usuario Sin Nombre'}
-              {/* Badge de Verificación (Simulado por ahora) */}
-              <span className="text-blue-500" title="Cuenta Verificada">
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-              </span>
+              {profile.full_name || (isBrand ? 'Empresa Sin Nombre' : 'Usuario Sin Nombre')}
+              {profile.role === 'influencer' && ( // Solo influencers verificados llevan check azul
+                  <span className="text-blue-500" title="Cuenta Verificada">
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                  </span>
+              )}
             </h1>
             
             <div className="flex flex-wrap items-center gap-4 text-gray-500 mt-2">
@@ -142,7 +142,7 @@ export default function MyProfilePage() {
                   <MapPin size={16} /> {profile.city}, {profile.country}
                 </span>
               )}
-              <span className="px-3 py-1 bg-gray-100 rounded-full text-xs font-bold uppercase tracking-wider">
+              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${isBrand ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
                 {isBrand ? 'Empresa' : 'Influencer'}
               </span>
             </div>
@@ -152,8 +152,8 @@ export default function MyProfilePage() {
           {profile.bio && (
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
               <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
-                <User size={20} className="text-[var(--color-brand-orange)]" />
-                Bio
+                {isBrand ? <Building2 size={20} className="text-gray-400"/> : <User size={20} className="text-[var(--color-brand-orange)]" />}
+                {isBrand ? 'Sobre la Empresa' : 'Bio'}
               </h3>
               <p className="text-gray-600 leading-relaxed whitespace-pre-line">
                 {profile.bio}
@@ -166,7 +166,7 @@ export default function MyProfilePage() {
             <div>
               <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
                 <Hash size={20} className="text-[var(--color-brand-orange)]" />
-                Intereses / Nicho
+                {isBrand ? 'Industria' : 'Intereses'}
               </h3>
               <div className="flex flex-wrap gap-2">
                 {profile.categories.map((cat, index) => (
@@ -192,8 +192,29 @@ export default function MyProfilePage() {
 
           <div className="grid gap-4">
             
-            {/* Instagram Card */}
-            {profile.instagram_handle ? (
+            {/* 1. SITIO WEB (CRÍTICO PARA MARCAS) */}
+            {profile.website && (
+                <a 
+                  href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="group flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-200 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
+                      <Globe size={20} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-800">Sitio Web</p>
+                      <p className="text-xs text-gray-500 truncate max-w-[150px]">{profile.website.replace(/^https?:\/\//, '')}</p>
+                    </div>
+                  </div>
+                  <div className="text-gray-300 group-hover:text-blue-500 transition-colors">→</div>
+                </a>
+            )}
+
+            {/* 2. REDES SOCIALES (SOLO SI EXISTEN) */}
+            {profile.instagram_handle && (
               <a 
                 href={profile.instagram_url || `https://instagram.com/${profile.instagram_handle.replace('@','')}`} 
                 target="_blank" 
@@ -209,18 +230,8 @@ export default function MyProfilePage() {
                     <p className="text-xs text-gray-500">{profile.instagram_handle}</p>
                   </div>
                 </div>
-                <div className="text-gray-300 group-hover:text-pink-500 transition-colors">
-                  →
-                </div>
+                <div className="text-gray-300 group-hover:text-pink-500 transition-colors">→</div>
               </a>
-            ) : (
-              // Estado vacío (Placeholder)
-              <div className="opacity-50 flex items-center justify-between p-4 border border-dashed border-gray-300 rounded-2xl">
-                 <div className="flex items-center gap-3">
-                    <Instagram size={20} className="text-gray-400"/>
-                    <span className="text-sm text-gray-500">Instagram no conectado</span>
-                 </div>
-              </div>
             )}
 
             {/* TikTok Card */}
@@ -267,9 +278,11 @@ export default function MyProfilePage() {
 
           </div>
 
-          {!profile.instagram_handle && !profile.tiktok_handle && !profile.facebook_handle && (
-             <div className="p-4 bg-yellow-50 text-yellow-800 rounded-xl text-sm">
-                ⚠️ Tu perfil se ve un poco vacío. Agrega tus redes sociales para que te contacten.
+          {/* 3. ALERTA DE PERFIL VACÍO (CONDICIONAL) */}
+          {/* Solo mostramos la alerta si faltan redes (Influencer) O falta web (Marca) */}
+          {((!isBrand && !profile.instagram_handle && !profile.tiktok_handle) || (isBrand && !profile.website)) && (
+             <div className="p-4 bg-yellow-50 text-yellow-800 rounded-xl text-sm border border-yellow-100">
+                ⚠️ {isBrand ? 'Agrega tu Sitio Web para generar confianza.' : 'Tu perfil se ve vacío. Conecta tus redes.'}
              </div>
           )}
 

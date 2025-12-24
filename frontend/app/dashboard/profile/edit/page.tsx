@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import AvatarUpload from '@/components/AvatarUpload'
 import { 
   Save, MapPin, Phone, Globe, Instagram, Facebook, 
-  ArrowLeft, Hash, Link as LinkIcon 
+  ArrowLeft, Hash, Link as LinkIcon, Building2, Store 
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -64,7 +64,7 @@ export default function EditProfilePage() {
     tiktok_url: '',    // Nuevo
     facebook_url: '',  // Nuevo
     website: '',
-    role: 'influencer'
+    role: 'influencer' // Se actualizará al cargar
   })
 
   // 1. Cargar datos
@@ -139,11 +139,14 @@ export default function EditProfilePage() {
       console.error(error)
       alert('Error al guardar')
     } else {
-      router.push('/dashboard/profile')
+      router.push('/dashboard') // Volver al dashboard al terminar
     }
   }
 
   if (loading) return <div className="p-8 text-center animate-pulse">Cargando perfil...</div>
+
+  // Lógica para detectar si es marca
+  const isBrand = formData.role === 'brand';
 
   return (
     <div className="max-w-4xl mx-auto pb-20 animate-fade-in">
@@ -154,17 +157,23 @@ export default function EditProfilePage() {
             <ArrowLeft size={24} className="text-gray-500"/>
         </Link>
         <div>
-            <h1 className="text-3xl font-bold text-[var(--color-brand-dark)]">Editar Perfil</h1>
-            <p className="text-gray-500">Completa tu información para destacar ante las marcas.</p>
+            <h1 className="text-3xl font-bold text-[var(--color-brand-dark)]">
+                {isBrand ? 'Perfil de Empresa' : 'Editar Perfil'}
+            </h1>
+            <p className="text-gray-500">
+                {isBrand 
+                    ? 'Esta información será visible para los influencers.' 
+                    : 'Completa tu información para destacar ante las marcas.'}
+            </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         
-        {/* COLUMNA IZQUIERDA */}
+        {/* COLUMNA IZQUIERDA (FOTO/LOGO) */}
         <div className="md:col-span-1 space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
-            <h3 className="font-bold text-gray-700 mb-4">Tu Imagen</h3>
+            <h3 className="font-bold text-gray-700 mb-4">{isBrand ? 'Logo de la Marca' : 'Tu Foto'}</h3>
             <AvatarUpload 
               uid={userId || ''}
               url={formData.avatar_url}
@@ -172,32 +181,40 @@ export default function EditProfilePage() {
               onUpload={(url) => setFormData(prev => ({ ...prev, avatar_url: url }))}
             />
             <p className="text-xs text-gray-400 mt-4">Recomendado: 500x500px</p>
+            {/* Alerta visual si es marca y no tiene logo */}
+            {isBrand && !formData.avatar_url && (
+                <p className="text-xs text-red-500 font-bold mt-2 animate-pulse">¡Sube tu logo para dar confianza!</p>
+            )}
           </div>
         </div>
 
-        {/* COLUMNA DERECHA */}
+        {/* COLUMNA DERECHA (DATOS) */}
         <div className="md:col-span-2 space-y-6">
           
-          {/* SECCIÓN 1: SOBRE TI */}
+          {/* SECCIÓN 1: DATOS BÁSICOS */}
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <Hash size={20} className="text-[var(--color-brand-orange)]" />
-              Sobre Ti
+              {isBrand ? <Building2 size={20} className="text-[var(--color-brand-orange)]" /> : <Hash size={20} className="text-[var(--color-brand-orange)]" />}
+              {isBrand ? 'Información de la Empresa' : 'Sobre Ti'}
             </h2>
             
             <div className="grid gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Completo</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isBrand ? 'Nombre de la Marca' : 'Nombre Completo'}
+                </label>
                 <input 
                   type="text" name="full_name" value={formData.full_name} onChange={handleChange}
                   className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-200 outline-none"
-                  placeholder="Ej. Juan Pérez"
+                  placeholder={isBrand ? "Ej. Adidas Chile" : "Ej. Juan Pérez"}
                 />
               </div>
 
-              {/* Categorías */}
+              {/* Categorías (Visible para ambos, útil para filtrar) */}
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-700 ml-1">Tipo de Contenido</label>
+                <label className="text-sm font-semibold text-gray-700 ml-1">
+                    {isBrand ? 'Industria / Nicho' : 'Tipo de Contenido'}
+                </label>
                 <div 
                     className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-xl flex flex-wrap gap-2 transition-all focus-within:bg-white focus-within:border-[var(--color-brand-orange)]"
                     onMouseEnter={() => setFocusedField('categories')}
@@ -218,116 +235,107 @@ export default function EditProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Biografía Corta</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isBrand ? 'Descripción de la Empresa' : 'Biografía Corta'}
+                </label>
                 <textarea 
                   name="bio" rows={3} value={formData.bio} onChange={handleChange}
                   className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-200 outline-none"
-                  placeholder="Cuéntanos sobre ti..."
+                  placeholder={isBrand ? "Somos una empresa líder en..." : "Cuéntanos sobre ti..."}
                 />
               </div>
+
+              {/* SOLO MARCAS: SITIO WEB (Reemplaza a las redes sociales) */}
+              {isBrand && (
+                  <div className="animate-fade-in">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Sitio Web Oficial</label>
+                    <div className="relative">
+                        <Globe className="absolute left-3 top-3.5 text-gray-400" size={18}/>
+                        <input 
+                        type="text" name="website" value={formData.website} onChange={handleChange}
+                        className="w-full p-3 pl-10 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-200 outline-none"
+                        placeholder="https://miempresa.com"
+                        />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Fundamental para verificar tu marca.</p>
+                  </div>
+              )}
             </div>
           </div>
 
-          {/* SECCIÓN 2: UBICACIÓN */}
+          {/* SECCIÓN 2: UBICACIÓN Y CONTACTO */}
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <MapPin size={20} className="text-green-500" />
-              Ubicación
+              Ubicación y Contacto
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <input type="text" name="city" value={formData.city} onChange={handleChange} placeholder="Ciudad" className="w-full p-3 border border-gray-200 rounded-xl focus:ring-green-100 outline-none" />
               <input type="text" name="country" value={formData.country} onChange={handleChange} placeholder="País" className="w-full p-3 border border-gray-200 rounded-xl focus:ring-green-100 outline-none" />
-              <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="Teléfono" className="md:col-span-2 w-full p-3 border border-gray-200 rounded-xl focus:ring-green-100 outline-none" />
+              <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="Teléfono de contacto" className="md:col-span-2 w-full p-3 border border-gray-200 rounded-xl focus:ring-green-100 outline-none" />
             </div>
           </div>
 
-          {/* SECCIÓN 3: REDES SOCIALES (ACTUALIZADA) */}
-          <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <Globe size={20} className="text-blue-500" />
-              Tus Redes Sociales
-            </h2>
-            <p className="text-sm text-gray-500 mb-6">Agrega tu usuario y el enlace directo a tu perfil.</p>
-            
-            <div className="space-y-6">
-              
-              {/* INSTAGRAM BLOQUE */}
-              <div className="bg-pink-50/50 p-4 rounded-xl border border-pink-100">
-                <div className="flex items-center gap-2 mb-3 text-pink-700 font-bold">
-                  <Instagram size={18} /> Instagram
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-pink-400 font-bold ml-1">Usuario</label>
-                    <input 
-                      type="text" name="instagram_handle" value={formData.instagram_handle} onChange={handleChange}
-                      className="w-full p-3 bg-white border border-pink-100 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm"
-                      placeholder="@usuario"
-                    />
+          {/* SECCIÓN 3: REDES SOCIALES (SOLO INFLUENCER) */}
+          {/* Si es marca, ocultamos esto para simplificar, ya que pedimos la Web arriba */}
+          {!isBrand && (
+              <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-fade-in">
+                <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                  <Globe size={20} className="text-blue-500" />
+                  Tus Redes Sociales
+                </h2>
+                <p className="text-sm text-gray-500 mb-6">Agrega tu usuario y el enlace directo a tu perfil.</p>
+                
+                <div className="space-y-6">
+                  
+                  {/* INSTAGRAM */}
+                  <div className="bg-pink-50/50 p-4 rounded-xl border border-pink-100">
+                    <div className="flex items-center gap-2 mb-3 text-pink-700 font-bold"><Instagram size={18} /> Instagram</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs text-pink-400 font-bold ml-1">Usuario</label>
+                            <input type="text" name="instagram_handle" value={formData.instagram_handle} onChange={handleChange} className="w-full p-3 bg-white border border-pink-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-200" placeholder="@usuario"/>
+                        </div>
+                        <div>
+                            <label className="text-xs text-pink-400 font-bold ml-1 flex items-center gap-1"><LinkIcon size={10}/> URL Perfil</label>
+                            <input type="text" name="instagram_url" value={formData.instagram_url} onChange={handleChange} className="w-full p-3 bg-white border border-pink-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-200" placeholder="https://instagram.com/..."/>
+                        </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs text-pink-400 font-bold ml-1 flex items-center gap-1"><LinkIcon size={10}/> URL Perfil</label>
-                    <input 
-                      type="text" name="instagram_url" value={formData.instagram_url} onChange={handleChange}
-                      className="w-full p-3 bg-white border border-pink-100 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm"
-                      placeholder="https://instagram.com/..."
-                    />
+                  
+                  {/* TIKTOK */}
+                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <div className="flex items-center gap-2 mb-3 text-gray-800 font-bold"><span>Tk</span> TikTok</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs text-gray-400 font-bold ml-1">Usuario</label>
+                            <input type="text" name="tiktok_handle" value={formData.tiktok_handle} onChange={handleChange} className="w-full p-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-gray-300" placeholder="@usuario"/>
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-400 font-bold ml-1 flex items-center gap-1"><LinkIcon size={10}/> URL Perfil</label>
+                            <input type="text" name="tiktok_url" value={formData.tiktok_url} onChange={handleChange} className="w-full p-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-gray-300" placeholder="https://tiktok.com/..."/>
+                        </div>
+                    </div>
                   </div>
+
+                  {/* FACEBOOK */}
+                  <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                    <div className="flex items-center gap-2 mb-3 text-blue-700 font-bold"><Facebook size={18} /> Facebook</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs text-blue-400 font-bold ml-1">Usuario</label>
+                            <input type="text" name="facebook_handle" value={formData.facebook_handle} onChange={handleChange} className="w-full p-3 bg-white border border-blue-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200" placeholder="Usuario"/>
+                        </div>
+                        <div>
+                            <label className="text-xs text-blue-400 font-bold ml-1 flex items-center gap-1"><LinkIcon size={10}/> URL Perfil</label>
+                            <input type="text" name="facebook_url" value={formData.facebook_url} onChange={handleChange} className="w-full p-3 bg-white border border-blue-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200" placeholder="https://facebook.com/..."/>
+                        </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
-
-              {/* TIKTOK BLOQUE */}
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <div className="flex items-center gap-2 mb-3 text-gray-800 font-bold">
-                  <span className="font-bold">Tk</span> TikTok
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-400 font-bold ml-1">Usuario</label>
-                    <input 
-                      type="text" name="tiktok_handle" value={formData.tiktok_handle} onChange={handleChange}
-                      className="w-full p-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-300 outline-none text-sm"
-                      placeholder="@usuario"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 font-bold ml-1 flex items-center gap-1"><LinkIcon size={10}/> URL Perfil</label>
-                    <input 
-                      type="text" name="tiktok_url" value={formData.tiktok_url} onChange={handleChange}
-                      className="w-full p-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-300 outline-none text-sm"
-                      placeholder="https://tiktok.com/..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* FACEBOOK BLOQUE */}
-              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
-                <div className="flex items-center gap-2 mb-3 text-blue-700 font-bold">
-                  <Facebook size={18} /> Facebook
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-blue-400 font-bold ml-1">Usuario</label>
-                    <input 
-                      type="text" name="facebook_handle" value={formData.facebook_handle} onChange={handleChange}
-                      className="w-full p-3 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none text-sm"
-                      placeholder="Usuario"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-blue-400 font-bold ml-1 flex items-center gap-1"><LinkIcon size={10}/> URL Perfil</label>
-                    <input 
-                      type="text" name="facebook_url" value={formData.facebook_url} onChange={handleChange}
-                      className="w-full p-3 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none text-sm"
-                      placeholder="https://facebook.com/..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
+          )}
 
           <div className="flex justify-end pt-4">
             <button 
