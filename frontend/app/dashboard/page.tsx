@@ -245,7 +245,7 @@ export default function DashboardPage() {
                 <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform"><Users size={24}/></div>
             </div>
             <p className="text-4xl font-black text-[var(--color-brand-dark)]">{profile?.followers_count?.toLocaleString() || 0}</p>
-            <p className="text-sm text-slate-500 font-bold mt-2 flex items-center gap-1">@{profile?.social_handle || 'usuario'} {profile?.is_verified && <Sparkles size={14} className="text-blue-500"/>}</p>
+            <p className="text-sm text-slate-500 font-bold mt-2 flex items-center gap-1">@{profile?.full_name || 'usuario'} {profile?.is_verified && <Sparkles size={14} className="text-blue-500"/>}</p>
           </div>
         </div>
       )}
