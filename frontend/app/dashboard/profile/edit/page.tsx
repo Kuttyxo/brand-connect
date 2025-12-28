@@ -6,9 +6,11 @@ import { useRouter } from 'next/navigation'
 import AvatarUpload from '@/components/AvatarUpload'
 import { 
   Save, MapPin, Phone, Globe, Instagram, Facebook, 
-  ArrowLeft, Hash, Link as LinkIcon, Building2, Store 
+  ArrowLeft, Hash, Link as LinkIcon, Building2, Store, Video 
 } from 'lucide-react'
 import Link from 'next/link'
+// 1. IMPORTAR EL COMPONENTE NUEVO
+import PortfolioManager from '@/components/PortfolioManager'
 
 // CONSTANTES
 const CATEGORIES = [
@@ -60,11 +62,11 @@ export default function EditProfilePage() {
     instagram_handle: '',
     tiktok_handle: '',
     facebook_handle: '',
-    instagram_url: '', // Nuevo
-    tiktok_url: '',    // Nuevo
-    facebook_url: '',  // Nuevo
+    instagram_url: '', 
+    tiktok_url: '',    
+    facebook_url: '',  
     website: '',
-    role: 'influencer' // Se actualizará al cargar
+    role: 'influencer' 
   })
 
   // 1. Cargar datos
@@ -139,7 +141,7 @@ export default function EditProfilePage() {
       console.error(error)
       alert('Error al guardar')
     } else {
-      router.push('/dashboard') // Volver al dashboard al terminar
+      router.push('/dashboard') 
     }
   }
 
@@ -210,7 +212,7 @@ export default function EditProfilePage() {
                 />
               </div>
 
-              {/* Categorías (Visible para ambos, útil para filtrar) */}
+              {/* Categorías */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700 ml-1">
                     {isBrand ? 'Industria / Nicho' : 'Tipo de Contenido'}
@@ -245,7 +247,7 @@ export default function EditProfilePage() {
                 />
               </div>
 
-              {/* SOLO MARCAS: SITIO WEB (Reemplaza a las redes sociales) */}
+              {/* SOLO MARCAS: SITIO WEB */}
               {isBrand && (
                   <div className="animate-fade-in">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Sitio Web Oficial</label>
@@ -277,7 +279,6 @@ export default function EditProfilePage() {
           </div>
 
           {/* SECCIÓN 3: REDES SOCIALES (SOLO INFLUENCER) */}
-          {/* Si es marca, ocultamos esto para simplificar, ya que pedimos la Web arriba */}
           {!isBrand && (
               <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-fade-in">
                 <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
@@ -335,6 +336,30 @@ export default function EditProfilePage() {
 
                 </div>
               </div>
+          )}
+
+          {/* ======================================================= */}
+          {/* ✨ SECCIÓN 4: PORTAFOLIO MULTIMEDIA (SOLO INFLUENCER) ✨ */}
+          {/* ======================================================= */}
+          {!isBrand && userId && (
+             <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-fade-in">
+                {/* Header de la sección */}
+                <h2 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+                    <Video size={20} className="text-purple-600" />
+                    Mejores Trabajos (Portafolio)
+                </h2>
+                <p className="text-sm text-gray-500 mb-6">
+                    Sube hasta 4 de tus mejores videos para que las marcas vean tu talento.
+                </p>
+
+                {/* Componente Gestor de Portafolio */}
+                <PortfolioManager 
+                    userId={userId} 
+                    // Pasamos el handle de IG o TikTok para verificar propiedad. 
+                    // Priorizamos IG, si no hay, usamos TikTok.
+                    userHandle={formData.instagram_handle || formData.tiktok_handle || ''} 
+                />
+             </div>
           )}
 
           <div className="flex justify-end pt-4">

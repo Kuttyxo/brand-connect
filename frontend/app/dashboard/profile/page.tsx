@@ -6,9 +6,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Edit3, MapPin, Instagram, Facebook, Globe, 
-  Share2, Hash, User, Building2, 
+  Share2, Hash, User, Building2, Video,
   Star, Zap, Crown, ShieldCheck, CheckCircle2, AlertCircle
 } from 'lucide-react';
+// Importamos las librerías de Embed directamente aquí
+import { TikTokEmbed, InstagramEmbed, YouTubeEmbed } from 'react-social-media-embed';
 
 type Profile = {
   id: string;
@@ -26,7 +28,7 @@ type Profile = {
   is_verified: boolean;
 };
 
-// --- CONFIGURACIÓN DE NIVELES (MISMA QUE DASHBOARD) ---
+// --- CONFIGURACIÓN DE NIVELES ---
 const LEVELS = {
   STARTER: { min: 0, name: 'Starter', color: 'text-yellow-600', bg: 'bg-yellow-50', border: 'border-yellow-200', icon: Star },
   PRO:     { min: 5, name: 'Pro Creator', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', icon: Zap },
@@ -35,6 +37,7 @@ const LEVELS = {
 
 export default function MyProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [portfolio, setPortfolio] = useState<any[]>([]); // Estado para los videos
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -45,7 +48,7 @@ export default function MyProfilePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchProfileData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -53,29 +56,40 @@ export default function MyProfilePage() {
         return;
       }
 
-      // 1. Obtener Perfil
-      const { data, error } = await supabase
+      // 1. Obtener Perfil Básico
+      const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
 
-      if (data) {
-        setProfile(data);
-        if (data.avatar_url) {
-            if (data.avatar_url.startsWith('http')) {
-                setAvatarUrl(data.avatar_url);
+      if (profileData) {
+        setProfile(profileData);
+        
+        // Avatar
+        if (profileData.avatar_url) {
+            if (profileData.avatar_url.startsWith('http')) {
+                setAvatarUrl(profileData.avatar_url);
             } else {
                 const { data: publicUrl } = supabase.storage
                     .from('avatars')
-                    .getPublicUrl(data.avatar_url);
+                    .getPublicUrl(profileData.avatar_url);
                 setAvatarUrl(publicUrl.publicUrl);
             }
         }
 
-        // 2. CALCULAR ESTADÍSTICAS PARA INSIGNIAS 🏆
-        if (data.role === 'influencer') {
-            // Contar trabajos completados para definir Nivel
+        // 2. Obtener PORTAFOLIO (Videos) 🎥
+        if (profileData.role === 'influencer') { // Solo si es influencer gastamos recursos buscando videos
+            const { data: portfolioData } = await supabase
+                .from('portfolio_items')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+            setPortfolio(portfolioData || []);
+        }
+
+        // 3. Estadísticas para Insignias
+        if (profileData.role === 'influencer') {
             const { count } = await supabase
                 .from('applications')
                 .select('*', { count: 'exact', head: true })
@@ -83,7 +97,6 @@ export default function MyProfilePage() {
                 .eq('status', 'completed');
             setCompletedJobs(count || 0);
         } else {
-            // Contar campañas creadas para validar Marca Activa
             const { count } = await supabase
                 .from('campaigns')
                 .select('*', { count: 'exact', head: true })
@@ -94,10 +107,9 @@ export default function MyProfilePage() {
       setLoading(false);
     };
 
-    fetchProfile();
+    fetchProfileData();
   }, [router]);
 
-  // Función para obtener el nivel actual
   const getCurrentLevel = (count: number) => {
     if (count >= LEVELS.ELITE.min) return LEVELS.ELITE;
     if (count >= LEVELS.PRO.min) return LEVELS.PRO;
@@ -110,8 +122,6 @@ export default function MyProfilePage() {
 
   const isBrand = profile.role === 'brand';
   const level = getCurrentLevel(completedJobs);
-  
-  // Verificación de Marca: Debe tener web, logo y estar verificada o tener campañas
   const isTrustedBrand = isBrand && profile.website && profile.avatar_url && (profile.is_verified || campaignsCreated > 0);
 
   return (
@@ -123,7 +133,7 @@ export default function MyProfilePage() {
            <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
         </div>
 
-        {/* Tarjeta Flotante con Avatar e Insignias */}
+        {/* Tarjeta Flotante con Avatar */}
         <div className="absolute -bottom-16 left-6 md:left-10 flex items-end gap-6 w-full pr-10">
           <div className="relative">
             <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-[6px] border-white shadow-xl bg-white overflow-hidden flex items-center justify-center">
@@ -135,7 +145,6 @@ export default function MyProfilePage() {
                 </div>
                 )}
             </div>
-            {/* Badge de Verificación Pequeño en el Avatar */}
             {(profile.is_verified || isTrustedBrand) && (
                 <div className="absolute bottom-2 right-2 bg-blue-500 text-white p-1.5 rounded-full border-4 border-white shadow-sm" title="Verificado">
                     <CheckCircle2 size={20} />
@@ -143,7 +152,7 @@ export default function MyProfilePage() {
             )}
           </div>
           
-          {/* INSIGNIAS DE NIVEL / CONFIANZA (Móvil: Debajo / Desktop: Al lado) */}
+          {/* INSIGNIAS DE NIVEL (Desktop) */}
           <div className="hidden md:flex mb-4 gap-3">
              {isBrand ? (
                  isTrustedBrand && (
@@ -179,18 +188,18 @@ export default function MyProfilePage() {
         </div>
       </div>
 
-      {/* INSIGNIAS EN MÓVIL (Se muestran aquí si la pantalla es chica) */}
+      {/* INSIGNIAS EN MÓVIL */}
       <div className="md:hidden mt-20 mb-6 px-2">
          {isBrand ? (
              isTrustedBrand ? (
                 <div className="flex items-center gap-3 bg-green-50 p-3 rounded-xl border border-green-100 text-green-800">
                     <ShieldCheck size={24} />
-                    <span className="font-bold text-sm">Empresa Verificada y Activa</span>
+                    <span className="font-bold text-sm">Empresa Verificada</span>
                 </div>
              ) : (
                 <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200 text-gray-500">
                     <AlertCircle size={24} />
-                    <span className="font-medium text-sm">Perfil de empresa sin verificar</span>
+                    <span className="font-medium text-sm">Sin verificar</span>
                 </div>
              )
          ) : (
@@ -198,16 +207,16 @@ export default function MyProfilePage() {
                  <level.icon size={24} />
                  <div>
                      <p className="font-black text-lg leading-none">{level.name}</p>
-                     <p className="text-xs opacity-80 font-medium">{completedJobs} campañas completadas con éxito</p>
+                     <p className="text-xs opacity-80 font-medium">{completedJobs} trabajos completados</p>
                  </div>
              </div>
          )}
       </div>
 
-      {/* 2. CONTENIDO DEL PERFIL */}
+      {/* 2. CONTENIDO PRINCIPAL */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-4 md:mt-0">
         
-        {/* COLUMNA IZQUIERDA: Info Personal */}
+        {/* COLUMNA IZQUIERDA: Info Personal + Portafolio */}
         <div className="md:col-span-2 space-y-8">
           
           <div>
@@ -256,6 +265,44 @@ export default function MyProfilePage() {
               </div>
             </div>
           )}
+
+          {/* ========================================================= */}
+          {/* ✨ SECCIÓN PORTAFOLIO (Renderizado directo, sin componentes extra) ✨ */}
+          {/* ========================================================= */}
+          {!isBrand && portfolio.length > 0 && (
+             <div className="mt-8 pt-8 border-t border-gray-100 animate-fade-in">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4 text-lg">
+                    <Video size={20} className="text-purple-600"/> Portafolio Destacado
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                    {portfolio.map((item) => (
+                        <div key={item.id} className="relative bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
+                            <div className="flex justify-center items-center bg-gray-50 min-h-[350px] w-full">
+                                {item.platform === 'tiktok' && (
+                                    <div className="w-full flex justify-center overflow-hidden scale-[0.85] sm:scale-100 origin-top">
+                                        <TikTokEmbed url={item.url} width={325} />
+                                    </div>
+                                )}
+                                {item.platform === 'instagram' && (
+                                     <div className="w-full flex justify-center">
+                                        <InstagramEmbed url={item.url} width={328} captioned />
+                                    </div>
+                                )}
+                                {item.platform === 'youtube' && (
+                                    <YouTubeEmbed url={item.url} width="100%" height={220} />
+                                )}
+                            </div>
+                            
+                            <div className="absolute bottom-3 left-3 bg-black/50 backdrop-blur-md text-white text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider z-20">
+                                {item.platform}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+             </div>
+          )}
+
         </div>
 
         {/* COLUMNA DERECHA: Redes y Contacto */}
