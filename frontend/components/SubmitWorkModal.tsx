@@ -2,117 +2,136 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, Link as LinkIcon, Send, Loader2, Image as ImageIcon } from 'lucide-react';
+import { X, UploadCloud, Link as LinkIcon, FileText, Loader2 } from 'lucide-react';
 
-interface Props {
+interface SubmitWorkModalProps {
   applicationId: string;
   onClose: () => void;
   onSubmitted: () => void;
 }
 
-export default function SubmitWorkModal({ applicationId, onClose, onSubmitted }: Props) {
+export default function SubmitWorkModal({ applicationId, onClose, onSubmitted }: SubmitWorkModalProps) {
   const [loading, setLoading] = useState(false);
   const [evidenceUrl, setEvidenceUrl] = useState('');
-  const [comments, setComments] = useState('');
+  const [notes, setNotes] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No autenticado");
+      // 1. VERIFICACIÓN DE SESIÓN (CRÍTICO PARA EVITAR EL ERROR "NO AUTENTICADO")
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        throw new Error("No autenticado. Por favor recarga la página e intenta de nuevo.");
+      }
 
-      // 1. Guardar la evidencia en el acuerdo
+      if (!evidenceUrl.trim()) {
+        throw new Error("Debes incluir un enlace a tu trabajo (Drive, TikTok, Instagram, etc).");
+      }
+
+      // 2. Actualizar el Contrato con la Evidencia (Tabla 'agreements')
+      // Buscamos el acuerdo asociado a esta aplicación
       const { error: agreementError } = await supabase
         .from('agreements')
-        .update({ evidence_url: evidenceUrl })
+        .update({ 
+            evidence_url: evidenceUrl,
+            // Opcional: Podrías guardar las notas en algún campo si lo tienes, o dejarlas solo en el chat
+        })
         .eq('application_id', applicationId);
 
-      if (agreementError) throw agreementError;
+      if (agreementError) throw new Error("Error guardando evidencia: " + agreementError.message);
 
-      // 2. Cambiar estado a 'review' (Marca debe revisar)
+      // 3. Cambiar estado de la Postulación a 'review' (Tabla 'applications')
       const { error: appError } = await supabase
         .from('applications')
         .update({ status: 'review' })
         .eq('id', applicationId);
 
-      if (appError) throw appError;
+      if (appError) throw new Error("Error actualizando estado: " + appError.message);
 
-      // 3. Avisar en el chat
-      await supabase.from('messages').insert({
-        application_id: applicationId,
-        sender_id: user.id,
-        content: `🚀 ¡TRABAJO ENTREGADO! \n\n🔗 Link: ${evidenceUrl}\n📝 Nota: ${comments || 'Sin comentarios adicionales.'}\n\n(Esperando aprobación de la marca para liberar el pago)`
-      });
+      // 4. Enviar Mensaje Automático al Chat (Tabla 'messages')
+      // Esto avisa a la marca que hay una nueva entrega
+      const { error: msgError } = await supabase
+        .from('messages')
+        .insert({
+            application_id: applicationId,
+            sender_id: user.id,
+            content: `🚀 ¡TRABAJO ENVIADO!\n\n🔗 Evidencia: ${evidenceUrl}\n📝 Notas: ${notes || "Sin notas adicionales."}\n\nPor favor revisa el contenido y libera el pago si todo está correcto.`
+        });
 
+      if (msgError) throw new Error("Error enviando notificación: " + msgError.message);
+
+      // ¡Éxito!
       onSubmitted();
       onClose();
-      alert('¡Evidencia enviada! La marca ha sido notificada.');
 
     } catch (error: any) {
       console.error(error);
-      alert('Error: ' + error.message);
+      alert(error.message || "Ocurrió un error al entregar el trabajo.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-100 relative">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
-            <div>
-                <h3 className="font-bold text-xl">Entregar Trabajo</h3>
-                <p className="text-blue-100 text-sm">Sube la prueba de tu publicación</p>
-            </div>
-            <button onClick={onClose} className="p-2 bg-white/20 rounded-full hover:bg-white/40 transition-colors">
-                <X size={20} />
+        <div className="bg-blue-600 p-6 text-white">
+            <button onClick={onClose} className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors">
+                <X size={24} />
             </button>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+                <UploadCloud size={24} /> Entregar Trabajo
+            </h2>
+            <p className="text-blue-100 text-sm mt-1">
+                Envía tus pruebas para que la marca las revise.
+            </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          
-            {/* Input URL */}
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            
             <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                    <LinkIcon size={14}/> Link de la Publicación
+                <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <LinkIcon size={16} className="text-blue-500"/> Link a la Evidencia
                 </label>
                 <input 
                     type="url" 
                     required
-                    placeholder="https://instagram.com/p/..."
-                    className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none text-sm transition-all"
+                    placeholder="https://drive.google.com/..."
                     value={evidenceUrl}
-                    onChange={(e) => setEvidenceUrl(e.target.value)}
+                    onChange={e => setEvidenceUrl(e.target.value)}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
                 />
+                <p className="text-[10px] text-gray-400">Pega el link a tu publicación, video, o carpeta de Drive.</p>
             </div>
 
-            {/* Input Comentarios */}
             <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                    <ImageIcon size={14}/> Comentarios Adicionales
+                <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <FileText size={16} className="text-blue-500"/> Comentarios Adicionales
                 </label>
                 <textarea 
                     rows={3}
-                    placeholder="Aquí está el reel prometido. ¡Espero que les guste!"
-                    className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none text-sm transition-all resize-none"
-                    value={comments}
-                    onChange={(e) => setComments(e.target.value)}
+                    placeholder="Aquí están los cambios solicitados..."
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm resize-none"
                 />
             </div>
 
-            {/* Botón */}
-            <button 
-                type="submit" 
-                disabled={loading || !evidenceUrl}
-                className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition-all flex justify-center items-center gap-2 shadow-lg hover:shadow-blue-200"
-            >
-                {loading ? <Loader2 className="animate-spin"/> : <> <Send size={18}/> Enviar a Revisión </>}
-            </button>
-
+            <div className="pt-2">
+                <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                    {loading ? <Loader2 size={20} className="animate-spin"/> : 'Confirmar Entrega'}
+                </button>
+            </div>
         </form>
       </div>
     </div>

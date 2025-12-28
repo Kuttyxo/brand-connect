@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Send, ArrowLeft, User, FileText, CheckCircle, UploadCloud, Eye, DollarSign, MoreVertical, AlertTriangle, ShieldAlert, Lock } from 'lucide-react';
+import { Send, ArrowLeft, User, FileText, CheckCircle, UploadCloud, Eye, DollarSign, MoreVertical, AlertTriangle, ShieldAlert, Lock, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 
 // Componentes Modales
@@ -23,6 +23,9 @@ export default function ChatPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<any>(null);
   
+  // Estado de conexión Realtime
+  const [isConnected, setIsConnected] = useState(false);
+
   // Estados de Negocio
   const [appStatus, setAppStatus] = useState<string>('');
   const [userRole, setUserRole] = useState<'brand' | 'influencer' | 'admin' | null>(null);
@@ -38,17 +41,14 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Efecto de Inicialización y Suscripción Realtime
+  // 1. Cargar Datos Iniciales (Usuario y Postulación)
   useEffect(() => {
-    let channel: any;
-
-    const initChat = async () => {
+    const fetchChatData = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         setUserId(user.id);
   
-        // Cargar datos de la postulación
         const { data: appData, error: appError } = await supabase
           .from('applications')
           .select(`*, influencer:profiles!influencer_id(*), campaign:campaigns(*, brand:profiles!brand_id(*))`)
@@ -58,7 +58,6 @@ export default function ChatPage() {
         if (appError) throw appError;
 
         if (appData) {
-          // Detectar roles
           const isBrand = appData.campaign.brand_id === user.id;
           const isInfluencer = appData.influencer_id === user.id;
 
@@ -72,44 +71,17 @@ export default function ChatPage() {
               setUserRole('admin');
               setOtherUser(appData.campaign.brand); 
           }
-
           setAppStatus(appData.status);
         }
         
-        await fetchMessages();
-
-        // --- SUSCRIPCIÓN REALTIME DOBLE (MENSAJES + ESTADO) ---
-        channel = supabase
-          .channel(`chat:${id}`) 
-          // A. Escuchar Mensajes Nuevos
-          .on(
-            'postgres_changes', 
-            { 
-              event: 'INSERT', 
-              schema: 'public', 
-              table: 'messages', 
-              filter: `application_id=eq.${id}` 
-            }, 
-            (payload) => {
-              setMessages((current) => [...current, payload.new]);
-            }
-          )
-          // B. Escuchar Cambios de Estado (ESTO ES LO NUEVO) 🚨
-          // Cuando el Admin cambia el estado a 'cancelled' o 'completed', esto lo detecta.
-          .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'applications',
-                filter: `id=eq.${id}`
-            },
-            (payload) => {
-                console.log("Estado actualizado:", payload.new.status);
-                setAppStatus(payload.new.status); // Actualiza la UI instantáneamente
-            }
-          )
-          .subscribe();
+        // Cargar mensajes históricos
+        const { data: msgs } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('application_id', id)
+            .order('created_at', { ascending: true });
+            
+        setMessages(msgs || []);
 
       } catch (err: any) {
           console.error("Error cargando chat:", err);
@@ -119,52 +91,113 @@ export default function ChatPage() {
       }
     };
   
-    initChat();
-  
-    // Limpieza al salir
+    fetchChatData();
+  }, [id]);
+
+  // 2. SUSCRIPCIÓN REALTIME ROBUSTA
+  useEffect(() => {
+    if (!id) return;
+
+    const channel = supabase
+      .channel(`chat_room:${id}`) 
+      .on(
+        'postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages', 
+          filter: `application_id=eq.${id}` 
+        }, 
+        (payload) => {
+          // Lógica Anti-Duplicados: Solo agregamos si no existe ya en el estado
+          // (Esto evita que el mensaje se duplique con la actualización optimista)
+          setMessages((current) => {
+            const exists = current.find(m => m.id === payload.new.id);
+            if (exists) return current; 
+            return [...current, payload.new];
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'applications',
+            filter: `id=eq.${id}`
+        },
+        (payload) => {
+            console.log("⚡ Estado actualizado en vivo:", payload.new.status);
+            setAppStatus(payload.new.status);
+        }
+      )
+      .subscribe((status) => {
+          console.log(`🔌 Estado de Conexión Realtime: ${status}`);
+          if (status === 'SUBSCRIBED') setIsConnected(true);
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setIsConnected(false);
+      });
+
     return () => { 
-        if (channel) supabase.removeChannel(channel); 
+        supabase.removeChannel(channel); 
     };
   }, [id]);
 
-  // 2. Auto-scroll
+  // 3. Auto-scroll al fondo
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const fetchMessages = async () => {
-    const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('application_id', id)
-        .order('created_at', { ascending: true });
-    
-    if (error) console.error("Error mensajes:", error);
-    setMessages(data || []);
-  };
-
+  // 4. ENVÍO INSTANTÁNEO (Optimistic UI)
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !userId) return;
     
     const text = newMessage;
-    setNewMessage(''); 
+    setNewMessage(''); // Limpiar input inmediatamente
 
-    const { error } = await supabase
+    // A. Crear mensaje temporal para mostrarlo YA
+    const optimisticMsg = {
+        id: `temp-${Date.now()}`, // ID temporal
+        application_id: id,
+        sender_id: userId,
+        content: text,
+        created_at: new Date().toISOString(),
+        is_read: false
+    };
+
+    // B. Inyectar en la UI inmediatamente
+    setMessages((prev) => [...prev, optimisticMsg]);
+
+    // C. Enviar al servidor en segundo plano
+    const { data, error } = await supabase
         .from('messages')
         .insert({ 
             application_id: id, 
             sender_id: userId, 
             content: text 
-        });
+        })
+        .select()
+        .single();
 
     if (error) {
-        alert("Error al enviar mensaje");
-        setNewMessage(text);
+        alert("Error al enviar mensaje. Revisa tu conexión.");
+        // Si falla, removemos el mensaje temporal (rollback)
+        setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+        setNewMessage(text); // Devolver el texto al input
+    } else if (data) {
+        // D. Reemplazar el mensaje temporal con el real (confirmado por DB)
+        setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? data : m));
     }
   };
   
-  const refreshChat = () => { fetchMessages(); };
+  const refreshChat = async () => { 
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('application_id', id)
+        .order('created_at', { ascending: true });
+      if(data) setMessages(data);
+  };
 
   if (loading) return <div className="p-10 text-center flex items-center justify-center gap-2"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div> Conectando...</div>;
   
@@ -172,13 +205,23 @@ export default function ChatPage() {
 
   const isChatClosed = ['cancelled', 'completed'].includes(appStatus);
   const isReadOnly = userRole === 'admin'; 
+  const canCancel = appStatus === 'hired';
+  const canDispute = ['hired', 'review', 'completed', 'disputed'].includes(appStatus);
+  const showEmergencyOptions = !isReadOnly && !isChatClosed && (canCancel || canDispute);
 
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] animate-fade-in bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 relative">
       
+      {/* Indicador de Desconexión */}
+      {!isConnected && (
+         <div className="bg-red-50 text-red-600 text-[10px] py-1 text-center flex items-center justify-center gap-1 font-bold">
+            <WifiOff size={10}/> Conexión inestable. Reconectando...
+         </div>
+      )}
+
       {userRole === 'admin' && (
           <div className="bg-yellow-100 text-yellow-800 px-4 py-2 text-xs font-bold text-center flex items-center justify-center gap-2 border-b border-yellow-200">
-              <Eye size={14}/> MODO ESPECTADOR (ADMIN) - Estás visualizando una disputa activa
+              <Eye size={14}/> MODO ESPECTADOR (ADMIN)
           </div>
       )}
 
@@ -193,22 +236,24 @@ export default function ChatPage() {
                 ) : <div className="w-full h-full flex items-center justify-center text-gray-400"><User size={20}/></div>}
             </div>
             <div>
-                <h2 className="font-bold text-gray-800 leading-tight">{otherUser?.full_name || 'Usuario'}</h2>
+                <h2 className="font-bold text-gray-800 leading-tight flex items-center gap-2">
+                    {otherUser?.full_name || 'Usuario'}
+                    {isConnected && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="En línea"></span>}
+                </h2>
                 
                 {appStatus === 'disputed' && <p className="text-xs text-gray-800 font-black flex items-center gap-1"><ShieldAlert size={10}/> EN DISPUTA</p>}
                 {appStatus === 'cancelled' && <p className="text-xs text-red-600 font-black flex items-center gap-1 animate-pulse"><AlertTriangle size={10}/> CANCELADO</p>}
                 {appStatus === 'completed' && <p className="text-xs text-green-600 font-black flex items-center gap-1 animate-pulse"><CheckCircle size={10}/> FINALIZADO</p>}
                 
-                {/* Fallbacks visuales para otros estados */}
                 {appStatus === 'hired' && <p className="text-xs text-blue-600 font-bold">Contratado</p>}
                 {appStatus === 'review' && <p className="text-xs text-purple-600 font-bold">En Revisión</p>}
-
             </div>
             </div>
         </div>
 
         {userRole !== 'admin' && (
             <div className="flex gap-2 items-center">
+                {/* Botones de Acción (Happy Path) */}
                 {userRole === 'brand' && appStatus === 'accepted' && (
                     <button onClick={() => setShowOfferModal(true)} className="bg-[var(--color-brand-dark)] text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><FileText size={16} /> Acuerdo</button>
                 )}
@@ -219,13 +264,18 @@ export default function ChatPage() {
                     <button onClick={() => setShowReleaseModal(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 animate-bounce"><DollarSign size={16} /> Pagar</button>
                 )}
 
-                {!isChatClosed && (
+                {/* Menú de Emergencia */}
+                {showEmergencyOptions && (
                     <div className="relative">
                         <button onClick={() => setShowOptions(!showOptions)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"><MoreVertical size={20} /></button>
                         {showOptions && (
-                            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden py-1 z-50">
-                                <button onClick={() => { setShowDisputeModal(true); setShowOptions(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"><ShieldAlert size={16} /> Reportar Problema</button>
-                                <button onClick={() => { setShowCancelModal(true); setShowOptions(false); }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium"><AlertTriangle size={16} /> Cancelar Contrato</button>
+                            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden py-1 z-50 animate-in fade-in zoom-in duration-200">
+                                {canDispute && (
+                                    <button onClick={() => { setShowDisputeModal(true); setShowOptions(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"><ShieldAlert size={16} /> Reportar Problema</button>
+                                )}
+                                {canCancel && (
+                                    <button onClick={() => { setShowCancelModal(true); setShowOptions(false); }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium"><AlertTriangle size={16} /> Cancelar Contrato</button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -238,23 +288,24 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4" onClick={() => setShowOptions(false)}>
         {messages.map((msg) => {
           const isMe = msg.sender_id === userId;
+          const isTemp = msg.id.toString().startsWith('temp-'); // Detectar mensaje temporal
           const isSystemMessage = msg.content.includes('📝 PROPUESTA') || msg.content.includes('🚀 ¡TRABAJO') || msg.content.includes('🎉 ¡PAGO') || msg.content.includes('⚠️ CORRECCIONES') || msg.content.includes('🚫 CONTRATO') || msg.content.includes('⚖️');
 
           return (
-            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${isTemp ? 'opacity-70' : 'opacity-100'}`}>
               <div className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm shadow-sm whitespace-pre-wrap ${
                 isSystemMessage 
                     ? 'bg-gray-800 text-white border-2 border-gray-600'
                     : isMe ? 'bg-[var(--color-brand-orange)] text-white rounded-br-none' : 'bg-white text-gray-700 border border-gray-100 rounded-bl-none'
               }`}>
                 {msg.content}
-
+                
+                {/* Botones dentro del chat */}
                 {msg.content.includes('📝 PROPUESTA') && userRole === 'influencer' && appStatus === 'offered' && (
                     <div className="mt-3 pt-3 border-t border-white/20">
                         <button onClick={() => setShowReviewModal(true)} className="w-full bg-white text-gray-900 font-bold py-2 rounded shadow-sm">Ver y Aceptar</button>
                     </div>
                 )}
-                
                 {msg.content.includes('🚀 ¡TRABAJO') && userRole === 'brand' && appStatus === 'review' && (
                       <div className="mt-3 pt-3 border-t border-white/20">
                         <button onClick={() => setShowReleaseModal(true)} className="w-full bg-green-500 text-white font-bold py-2 rounded shadow-sm">Revisar Entrega</button>
