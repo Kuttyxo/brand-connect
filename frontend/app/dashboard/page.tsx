@@ -4,19 +4,20 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link'; 
-import { Users, DollarSign, Briefcase, Star, Zap, Crown, ArrowRight, Plus, Search, Clock, Rocket, Sparkles, AlertCircle } from 'lucide-react'; 
+import { Users, DollarSign, Briefcase, Star, Zap, Crown, ArrowRight, Plus, Search, Clock, Rocket, Sparkles, AlertCircle, Loader2 } from 'lucide-react'; 
 import BenefitsModal from '@/components/BenefitsModal';
 
 type Profile = {
+  id: string; // Agregué ID explícito aquí por seguridad
   full_name: string;
   role: string;
   social_handle: string;
   followers_count: number;
   engagement_rate: number;
   is_verified: boolean;
-  avatar_url: string | null; // Agregado para detectar si falta logo
-  website: string | null;    // Agregado para detectar si falta web
-  bio: string | null;        // Agregado para detectar si falta bio
+  avatar_url: string | null;
+  website: string | null;
+  bio: string | null;
 };
 
 const LEVELS = {
@@ -63,7 +64,13 @@ export default function DashboardPage() {
         .single();
 
       if (profileError) throw profileError;
-      setProfile((prev) => JSON.stringify(prev) !== JSON.stringify(profileData) ? profileData : prev);
+      
+      setProfile((prev) => {
+          if (JSON.stringify(prev) !== JSON.stringify(profileData)) {
+              return profileData;
+          }
+          return prev;
+      });
 
       if (profileData.role === 'brand') {
           const { data: campaigns } = await supabase.from('campaigns').select('id, budget, status').eq('brand_id', userId);
@@ -101,6 +108,7 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // --- 1. Inicialización y Realtime ---
   useEffect(() => {
     let channelProfiles: any;
     let channelApps: any;
@@ -110,9 +118,17 @@ export default function DashboardPage() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { router.push('/auth?mode=login'); return; }
+        
         await fetchDashboardData(user.id);
         setLoading(false);
-        channelProfiles = supabase.channel('dash_prof').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, () => fetchDashboardData(user.id)).subscribe();
+
+        // Realtime Subscription
+        channelProfiles = supabase.channel('dash_prof')
+        .on('postgres_changes', 
+            { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, 
+            () => fetchDashboardData(user.id)
+        ).subscribe();
+
         if (profile?.role === 'influencer') {
              channelApps = supabase.channel('dash_apps').on('postgres_changes', { event: '*', schema: 'public', table: 'applications', filter: `influencer_id=eq.${user.id}` }, () => fetchDashboardData(user.id)).subscribe();
              channelAgreements = supabase.channel('dash_money').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'agreements' }, () => fetchDashboardData(user.id)).subscribe();
@@ -121,30 +137,72 @@ export default function DashboardPage() {
         }
       } catch (error) { console.error('Error inicial:', error); setLoading(false); }
     };
+
     initDashboard();
+
     return () => {
       if (channelProfiles) supabase.removeChannel(channelProfiles);
       if (channelApps) supabase.removeChannel(channelApps);
       if (channelAgreements) supabase.removeChannel(channelAgreements);
     };
-  }, [router, fetchDashboardData, profile?.role]);
+  }, [router, fetchDashboardData, profile?.role]); 
+
+  // --- 2. POLLING DE RESPALDO (El Fix Definitivo) ---
+  // Si estamos esperando verificación, forzamos una revisión cada 3 segundos
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    // Solo activamos el polling si el usuario es influencer y NO está verificado
+    if (profile && profile.role === 'influencer' && !profile.is_verified) {
+        // console.log("⏳ Esperando verificación... Polling activado.");
+        interval = setInterval(() => {
+            fetchDashboardData(profile.id);
+        }, 3000); // 3 segundos
+    }
+
+    return () => {
+        if (interval) clearInterval(interval);
+    };
+  }, [profile, fetchDashboardData]);
   
+  // --- RENDERS ---
+
   if (loading) return <div className="p-8 text-center animate-pulse flex flex-col items-center justify-center h-[50vh] gap-4"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-brand-orange)]"></div><p className="text-gray-400 font-medium">Cargando tu espacio...</p></div>;
+
+  // PANTALLA DE "ANALIZANDO"
+  if (profile?.role === 'influencer' && !profile.is_verified) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 animate-in fade-in zoom-in duration-500">
+            <div className="relative">
+                <div className="absolute inset-0 bg-blue-500 blur-xl opacity-20 rounded-full animate-pulse"></div>
+                <div className="relative bg-white p-6 rounded-full shadow-xl border border-blue-50">
+                    <Loader2 size={48} className="text-blue-500 animate-spin" />
+                </div>
+            </div>
+            <div className="max-w-md space-y-2">
+                <h2 className="text-2xl font-bold text-gray-800">Analizando tu perfil...</h2>
+                <p className="text-gray-500">
+                    Nuestro bot está revisando tus estadísticas en redes sociales para asignarte un nivel inicial.
+                    <br/>
+                    <span className="text-xs text-blue-500 font-medium mt-2 block">Esto tomará unos segundos. No cierres la página.</span>
+                </p>
+            </div>
+            <div className="w-64 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full w-1/2 bg-blue-500 animate-pulse rounded-full"></div>
+            </div>
+        </div>
+      );
+  }
 
   const isBrand = profile?.role === 'brand';
   const formatMoney = (amount: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
 
-  // 🛡️ LÓGICA CORREGIDA PARA MARCAS INCOMPLETAS
   const isBrandIncomplete = isBrand && (!profile?.avatar_url || !profile?.website || !profile?.bio);
   
-  // Mostramos el CTA si:
-  // 1. Es Marca y (no tiene perfil completo O no tiene campañas)
-  // 2. Es Influencer y no está verificado
-  const showWelcomeCTA = (isBrand && (isBrandIncomplete || stats.totalCampaignsCreated === 0)) || (!isBrand && !profile?.is_verified);
+  const showWelcomeCTA = (isBrand && (isBrandIncomplete || stats.totalCampaignsCreated === 0));
 
   return (
     <div className="space-y-6 md:space-y-10 animate-fade-in pb-24">
-      
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
@@ -169,7 +227,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Cards (IGUAL QUE ANTES) */}
+      {/* Stats Cards */}
       {isBrand ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all group">
@@ -206,24 +264,19 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-{/* Card Ganancias (Ahora es un LINK a la Billetera) 💰 */}
+          {/* Card Ganancias (LINK a la Billetera) 💰 */}
           <Link href="/dashboard/wallet" className="block group">
             <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 hover:border-[var(--color-brand-orange)] transition-all cursor-pointer relative overflow-hidden h-full">
-                
-                {/* Indicador visual de click (Flecha en la esquina) */}
                 <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-brand-orange)]">
                     <ArrowRight size={24} className="-rotate-45"/>
                 </div>
-
                 <div className="flex justify-between mb-6">
                     <h3 className="text-slate-500 font-bold uppercase tracking-wider text-sm group-hover:text-[var(--color-brand-orange)] transition-colors">Ganancias</h3>
                     <div className="p-3 bg-green-100 text-green-600 rounded-2xl group-hover:scale-110 transition-transform"><DollarSign size={24}/></div>
                 </div>
-                
                 <p className="text-4xl font-black text-[var(--color-brand-dark)] truncate" title={formatMoney(stats.earnings)}>
                     {formatMoney(stats.earnings)}
                 </p>
-                
                 <div className="flex flex-wrap items-center gap-2 mt-4">
                     <span className="text-xs font-bold text-green-700 bg-green-100/80 px-3 py-1 rounded-full">Disponible</span>
                     {stats.escrow > 0 && (
@@ -232,7 +285,6 @@ export default function DashboardPage() {
                         </span>
                     )}
                 </div>
-
                 <p className="text-xs text-gray-400 mt-6 font-bold group-hover:text-[var(--color-brand-orange)] transition-colors flex items-center gap-1">
                     Ver Billetera y Retirar <ArrowRight size={12}/>
                 </p>
@@ -250,36 +302,29 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ========================================== */}
-      {/* ✨ FOOTER CTA PREMIUM (ADAPTADO) ✨ */}
-      {/* ========================================== */}
+      {/* CTA Footer */}
       {showWelcomeCTA && (
         <div className={`relative overflow-hidden rounded-[2.5rem] mt-12 p-8 md:p-12 text-center text-white shadow-2xl animate-in fade-in slide-in-from-bottom-6 
             ${isBrandIncomplete ? 'bg-gradient-to-br from-red-900 to-rose-800' : 'bg-[linear-gradient(135deg,var(--color-brand-dark)0%,#1a1a2e_100%)]'}`}
         >
             <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-            
             <div className="relative z-10 flex flex-col items-center">
                 <div className="w-24 h-24 bg-white/10 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 shadow-inner border border-white/20">
-                    {/* Icono diferente si falta completar perfil */}
                     {isBrandIncomplete 
                         ? <AlertCircle size={48} className="text-rose-300 drop-shadow-md animate-pulse"/> 
                         : (isBrand ? <Rocket size={48} className="text-[var(--color-brand-orange)]"/> : <Sparkles size={48} className="text-yellow-400"/>)
                     }
                 </div>
-                
                 <h3 className="text-3xl md:text-4xl font-black mb-4 tracking-tight leading-tight">
                     {isBrandIncomplete 
                         ? 'Tu Marca se ve "invisible" 👻' 
                         : (isBrand ? 'Tu próxima historia de éxito comienza aquí.' : 'Impulsa tu perfil.')}
                 </h3>
-                
                 <p className="text-white/80 text-lg md:text-xl max-w-2xl mx-auto mb-8 leading-relaxed font-medium">
                     {isBrandIncomplete
                         ? 'Sube tu logo y describe tu empresa para generar confianza. Los influencers no postulan a marcas sin perfil.'
                         : (isBrand ? 'Conecta con creadores auténticos y lanza campañas que generan impacto.' : 'Completa tu verificación.')}
                 </p>
-                
                 <Link href={isBrandIncomplete ? '/dashboard/profile/edit' : (isBrand ? '/create-campaign' : '/dashboard/profile/edit')} className="group relative inline-flex items-center justify-center">
                     <div className="absolute inset-0 bg-white/20 rounded-2xl blur-lg opacity-70 group-hover:opacity-100 transition-opacity duration-300 animate-pulse"></div>
                     <button className="relative bg-white text-[var(--color-brand-dark)] px-10 py-5 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all flex items-center gap-3">
