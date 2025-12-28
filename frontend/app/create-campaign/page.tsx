@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-// Agregué 'Info' a los imports para el icono de la advertencia
-import { ArrowLeft, DollarSign, FileText, Target, Send, Loader2, Sparkles, LayoutTemplate, Hash, CreditCard, ShieldCheck, CheckCircle, Info } from 'lucide-react';
+import { 
+  ArrowLeft, DollarSign, FileText, Target, Send, Loader2, Sparkles, 
+  LayoutTemplate, Hash, CreditCard, ShieldCheck, CheckCircle, Info, 
+  Lock, AlertTriangle, UserCog
+} from 'lucide-react';
 import Link from 'next/link';
 
 // Lista de Categorías Disponibles
@@ -18,9 +21,14 @@ const PUBLICATION_FEE = 14990;
 
 export default function CreateCampaignPage() {
   const router = useRouter();
+  
+  // Estados de carga y bloqueo
+  const [checkingProfile, setCheckingProfile] = useState(true);
+  const [isLocked, setIsLocked] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [step, setStep] = useState<'form' | 'payment'>('form'); // Controla el paso actual
+  const [step, setStep] = useState<'form' | 'payment'>('form'); 
   
   const [formData, setFormData] = useState({
     title: '',
@@ -29,6 +37,35 @@ export default function CreateCampaignPage() {
     budget: '',
     categories: [] as string[],
   });
+
+  // 🔒 VERIFICACIÓN DE PERFIL AL CARGAR
+  useEffect(() => {
+    const checkProfileCompleteness = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                router.push('/auth');
+                return;
+            }
+
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('avatar_url, website, bio')
+                .eq('id', user.id)
+                .single();
+
+            // Si falta algo vital, bloqueamos la página
+            if (!profile || !profile.avatar_url || !profile.website || !profile.bio) {
+                setIsLocked(true);
+            }
+        } catch (error) {
+            console.error("Error verificando perfil:", error);
+        } finally {
+            setCheckingProfile(false);
+        }
+    };
+    checkProfileCompleteness();
+  }, [router]);
 
   const toggleCategory = (category: string) => {
     setFormData(prev => {
@@ -42,13 +79,11 @@ export default function CreateCampaignPage() {
     setFocusedField('categories');
   };
 
-  // PASO 1: Validar y pasar al pago
   const handleGoToPayment = (e: React.FormEvent) => {
     e.preventDefault();
     setStep('payment');
   };
 
-  // PASO 2: Pagar y Publicar
   const handlePayAndPublish = async () => {
     setLoading(true);
 
@@ -84,6 +119,60 @@ export default function CreateCampaignPage() {
     }
   };
 
+  // --- VISTA DE CARGA ---
+  if (checkingProfile) {
+      return (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+              <Loader2 className="animate-spin text-[var(--color-brand-orange)]" size={48} />
+          </div>
+      );
+  }
+
+  // --- 🔒 VISTA DE BLOQUEO (CANDADO) ---
+  if (isLocked) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+            {/* Fondo decorativo */}
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-red-100 rounded-full blur-[100px] opacity-50 pointer-events-none"></div>
+            
+            <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-lg text-center relative z-10 border border-red-50 animate-in fade-in zoom-in duration-300">
+                <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Lock size={40} className="text-red-500" />
+                </div>
+                
+                <h2 className="text-3xl font-black text-gray-900 mb-4">Acceso Restringido</h2>
+                
+                <p className="text-gray-500 mb-8 text-lg leading-relaxed">
+                    Para garantizar la calidad en <strong>BrandConnect</strong>, las marcas deben tener un perfil completo antes de publicar ofertas.
+                </p>
+
+                <div className="bg-red-50 p-4 rounded-xl text-left mb-8 border border-red-100">
+                    <h4 className="font-bold text-red-800 mb-2 flex items-center gap-2"><AlertTriangle size={16}/> Te falta completar:</h4>
+                    <ul className="text-sm text-red-700 space-y-1 ml-6 list-disc">
+                        <li>Subir un <strong>Logo</strong> de empresa.</li>
+                        <li>Agregar un <strong>Sitio Web</strong> válido.</li>
+                        <li>Escribir una <strong>Biografía</strong>.</li>
+                    </ul>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <Link href="/dashboard/profile/edit">
+                        <button className="w-full bg-[var(--color-brand-dark)] text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-all shadow-lg flex items-center justify-center gap-2">
+                            <UserCog size={20}/> Completar mi Perfil Ahora
+                        </button>
+                    </Link>
+                    <Link href="/dashboard">
+                        <button className="w-full py-3 text-gray-400 font-bold hover:text-gray-600 transition-colors">
+                            Volver al Inicio
+                        </button>
+                    </Link>
+                </div>
+            </div>
+        </div>
+      );
+  }
+
+  // --- VISTA NORMAL (FORMULARIO) ---
   return (
     <div className="min-h-screen bg-slate-50 relative overflow-hidden selection:bg-[var(--color-brand-orange)] selection:text-white">
       
@@ -243,7 +332,7 @@ export default function CreateCampaignPage() {
                                     />
                                 </div>
                                 
-                                {/* --- AQUÍ AGREGUÉ LA ADVERTENCIA DE COMISIÓN --- */}
+                                {/* --- ADVERTENCIA DE COMISIÓN --- */}
                                 <div className="flex items-start gap-2 mt-2 px-1">
                                     <Info size={14} className="text-[var(--color-brand-orange)] shrink-0 mt-0.5" />
                                     <p className="text-xs text-gray-500">
