@@ -2,6 +2,7 @@ import os
 import time
 import random
 import requests
+import schedule
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -18,12 +19,12 @@ if not URL or not KEY:
 
 try:
     supabase: Client = create_client(URL, KEY)
-    print("🤖 BrandConnect Worker V4 (FIXED) INICIADO 🚀")
+    print("🤖 BrandConnect Worker V5 (Stats + Verificator) INICIADO 🚀")
 except Exception as e:
     print(f"❌ Error conectando a Supabase: {e}")
     exit()
 
-# --- FUNCIONES ---
+# --- FUNCIONES AUXILIARES ---
 
 def send_discord_alert(title, description, color, fields):
     if not WEBHOOK_URL: return
@@ -37,59 +38,41 @@ def send_discord_alert(title, description, color, fields):
         }]
     }
     try:
-        response = requests.post(WEBHOOK_URL, json=data)
-        # ESTO ES NUEVO: Si Discord dice que no (Error 400), lanzamos error para verlo en consola
-        response.raise_for_status() 
-    except Exception as e:
-        print(f"❌ Error enviando alerta a Discord (Posible error de formato): {e}")
+        requests.post(WEBHOOK_URL, json=data)
+    except Exception:
+        pass
 
 def mock_instagram_api(handle):
-    print(f"   🔎 Analizando: {handle}...")
-    time.sleep(1) 
+    # Simula la API de Instagram
     return {
         "followers": random.randint(1000, 50000),
         "engagement": round(random.uniform(1.5, 8.5), 2)
     }
 
+# --- TAREA 1: VERIFICAR USUARIOS NUEVOS (Tu lógica original) ---
 def process_unverified_users():
     try:
         response = supabase.table('profiles').select("*").eq('is_verified', False).execute()
         users = response.data
     except Exception as e:
-        print(f"❌ Error DB: {e}")
+        print(f"❌ Error DB (Verificación): {e}")
         return
 
     if not users: return 
 
-    print(f"🚀 Encontrados {len(users)} pendientes.")
+    print(f"🔍 Verificando {len(users)} usuarios pendientes...")
 
     for user in users:
         user_id = user.get('id')
         role = user.get('role')
         full_name = user.get('full_name') or "Usuario"
         
-        # FIX: Si no hay columna email, ponemos un texto por defecto para que Discord no falle
-        email = user.get('email')
-        if not email:
-            email = "No visible (Auth)"
-
-        print(f"👉 Procesando: {full_name} ({role})")
-
         # --- CASO 1: MARCA ---
         if role == 'brand':
             try:
-                # 1. Verificar en DB
                 supabase.table('profiles').update({'is_verified': True}).eq('id', user_id).execute()
-                print(f"   ✅ Marca Verificada en DB.")
-                
-                # 2. Enviar a Discord (Ahora con email seguro)
-                send_discord_alert(
-                    "🏢 Nueva Marca", 
-                    f"**{full_name}** ha sido verificada.", 
-                    8388863, # Morado
-                    [{"name": "Estado", "value": "Verificado ✅", "inline": True}]
-                )
-                print("   📨 Alerta enviada.")
+                print(f"   🏢 Marca verificada: {full_name}")
+                send_discord_alert("🏢 Nueva Marca", f"**{full_name}** verificada.", 8388863, [{"name": "Status", "value": "OK", "inline": True}])
             except Exception as e:
                 print(f"   ❌ Error Marca: {e}")
 
@@ -97,38 +80,93 @@ def process_unverified_users():
         elif role == 'influencer':
             handle = user.get('instagram_handle') or user.get('tiktok_handle')
             
-            if not handle:
-                candidate = full_name.strip()
-                if " " not in candidate:
-                    handle = candidate
-                    if not handle.startswith('@'): handle = f"@{handle}"
-                    print(f"   🔧 Auto-corrección: Handle '{handle}'")
-                    supabase.table('profiles').update({'instagram_handle': handle}).eq('id', user_id).execute()
-                else:
-                    print("   ⚠️ Nombre con espacios, saltando.")
-                    continue
+            # Auto-fix nombre si no hay handle
+            if not handle and " " not in full_name:
+                handle = f"@{full_name}"
+                supabase.table('profiles').update({'instagram_handle': handle}).eq('id', user_id).execute()
 
-            social_data = mock_instagram_api(handle)
-            if social_data:
+            if handle:
+                social_data = mock_instagram_api(handle)
                 try:
+                    # Actualizamos perfil
                     supabase.table('profiles').update({
                         "is_verified": True,
                         "followers_count": social_data['followers'],
                         "engagement_rate": social_data['engagement']
                     }).eq('id', user_id).execute()
                     
-                    print(f"   ✅ {handle} verificado.")
-                    
-                    send_discord_alert(
-                        "🚀 Influencer Verificado", 
-                        f"Perfil: **{handle}**", 
-                        16753920, 
-                        [{"name": "Seguidores", "value": str(social_data['followers']), "inline": True}]
-                    )
+                    # 🔥 IMPORTANTE: Creamos el PRIMER punto del gráfico
+                    supabase.table('stats_snapshots').insert({
+                        "user_id": user_id,
+                        "followers_count": social_data['followers'],
+                        "engagement_rate": social_data['engagement']
+                    }).execute()
+
+                    print(f"   🚀 Influencer verificado: {handle}")
+                    send_discord_alert("🚀 Influencer Verificado", f"Perfil: **{handle}**", 16753920, [{"name": "Seguidores", "value": str(social_data['followers']), "inline": True}])
                 except Exception as e:
                     print(f"   ❌ Error update: {e}")
 
+# --- TAREA 2: REGISTRAR CRECIMIENTO DIARIO (La nueva lógica) ---
+def record_daily_stats():
+    print("📈 Iniciando registro de estadísticas diarias...")
+    
+    # 1. Traer solo influencers VERIFICADOS
+    try:
+        response = supabase.table('profiles').select('*').eq('role', 'influencer').eq('is_verified', True).execute()
+        influencers = response.data
+    except Exception as e:
+        print(f"❌ Error DB (Stats): {e}")
+        return
+
+    if not influencers: return
+
+    for user in influencers:
+        # Simulación de crecimiento orgánico (entre 10 y 100 seguidores nuevos)
+        current_followers = user.get('followers_count', 0) or 0
+        organic_growth = random.randint(10, 100)
+        new_total = current_followers + organic_growth
+        
+        # Variación leve de engagement
+        current_engagement = user.get('engagement_rate', 0.0) or 0.0
+        new_engagement = max(0, min(10, current_engagement + random.uniform(-0.2, 0.2)))
+
+        try:
+            # A) Guardar en el Historial (Snapshot)
+            supabase.table('stats_snapshots').insert({
+                "user_id": user['id'],
+                "followers_count": new_total,
+                "engagement_rate": round(new_engagement, 2)
+            }).execute()
+
+            # B) Actualizar el Perfil (Total actual)
+            supabase.table('profiles').update({
+                "followers_count": new_total,
+                "engagement_rate": round(new_engagement, 2)
+            }).eq('id', user['id']).execute()
+
+            print(f"   ✅ {user.get('full_name')}: {current_followers} -> {new_total} (+{organic_growth})")
+            
+        except Exception as e:
+            print(f"   ❌ Error guardando stats de {user.get('id')}: {e}")
+
+# --- SCHEDULER (Gestor de Tiempos) ---
+
+# 1. Verificación: Rápida (cada 10 segundos)
+schedule.every(10).seconds.do(process_unverified_users)
+
+# 2. Estadísticas: Lenta (Normalmente cada 24h)
+# PARA DEMO: Lo pondremos cada 30 segundos para que veas el gráfico moverse en vivo
+schedule.every(30).seconds.do(record_daily_stats) 
+
+# --- LOOP PRINCIPAL ---
 if __name__ == "__main__":
+    print("⏱️  Worker corriendo. Presiona Ctrl+C para detener.")
+    
+    # Ejecutar una vez al inicio para poblar datos
+    process_unverified_users()
+    record_daily_stats() 
+
     while True:
-        process_unverified_users()
-        time.sleep(10)
+        schedule.run_pending()
+        time.sleep(1)
