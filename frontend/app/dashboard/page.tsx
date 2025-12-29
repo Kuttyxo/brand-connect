@@ -6,8 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link'; 
 import { 
   Users, DollarSign, Briefcase, Star, Zap, Crown, ArrowRight, Plus, 
-  Search, Clock, Rocket, Sparkles, AlertCircle, Loader2, TrendingUp,
-  CheckCircle2, LayoutDashboard
+  Search, Clock, Rocket, Sparkles, AlertCircle, Loader2, TrendingUp, LayoutDashboard
 } from 'lucide-react'; 
 import BenefitsModal from '@/components/BenefitsModal';
 import { AreaChart, Area, XAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
