@@ -6,22 +6,94 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { 
   ArrowLeft, Clock, MapPin, Briefcase, DollarSign, 
-  CheckCircle, AlertTriangle, Users, TrendingUp, Eye, Heart, MessageSquare
+  CheckCircle, AlertTriangle, Users, TrendingUp, Eye, Heart, MessageSquare, Loader2
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-// --- SUB-COMPONENTE: GRÁFICO DE CAMPAÑA (REALTIME ⚡) ---
+// --- SUB-COMPONENTE: TARJETA DE ESTADÍSTICAS (KPIs) ---
+const CampaignStatsCard = ({ campaignId }: { campaignId: string }) => {
+    const [stats, setStats] = useState({ views: 0, likes: 0, engagement: '0.0' });
+
+    const fetchLatestStats = useCallback(async () => {
+        // Obtenemos SOLO el último registro (el acumulado más reciente)
+        const { data } = await supabase
+            .from('campaign_stats_snapshots')
+            .select('total_views, total_likes')
+            .eq('campaign_id', campaignId)
+            .order('recorded_at', { ascending: false }) // El más nuevo primero
+            .limit(1)
+            .single();
+
+        if (data) {
+            const views = data.total_views || 0;
+            const likes = data.total_likes || 0;
+            // Cálculo de Engagement: (Likes / Vistas) * 100
+            const eng = views > 0 ? ((likes / views) * 100).toFixed(1) : '0.0';
+            
+            setStats({ views, likes, engagement: eng });
+        }
+    }, [campaignId]);
+
+    useEffect(() => {
+        fetchLatestStats();
+
+        // Suscripción Realtime (Para que el número salte junto con el gráfico)
+        const channel = supabase.channel(`camp-kpi-${campaignId}`)
+            .on('postgres_changes', 
+                { event: 'INSERT', schema: 'public', table: 'campaign_stats_snapshots', filter: `campaign_id=eq.${campaignId}` }, 
+                (payload) => {
+                    const newRecord = payload.new;
+                    const views = newRecord.total_views;
+                    const likes = newRecord.total_likes;
+                    const eng = views > 0 ? ((likes / views) * 100).toFixed(1) : '0.0';
+                    setStats({ views, likes, engagement: eng });
+                }
+            )
+            .subscribe();
+
+        // Polling de seguridad
+        const interval = setInterval(fetchLatestStats, 4000);
+        return () => { supabase.removeChannel(channel); clearInterval(interval); };
+    }, [campaignId, fetchLatestStats]);
+
+    return (
+        <div className="bg-purple-900 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden animate-fade-in">
+            {/* Fondo decorativo */}
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-purple-500 rounded-full blur-3xl opacity-30 pointer-events-none"></div>
+            
+            <div className="relative z-10">
+                <h3 className="font-bold text-purple-200 mb-6 flex items-center gap-2">
+                    <Briefcase size={18}/> Estado General
+                </h3>
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center border-b border-purple-800 pb-4">
+                        <span className="flex items-center gap-2 text-purple-100"><Eye size={18}/> Vistas Totales</span>
+                        <span className="font-black text-3xl tracking-tight">{stats.views.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="flex items-center gap-2 text-purple-100"><Heart size={18}/> Engagement</span>
+                        <div className="text-right">
+                            <span className="font-black text-3xl tracking-tight">{stats.engagement}%</span>
+                            <p className="text-xs text-purple-300 mt-1">{stats.likes.toLocaleString()} Likes</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- SUB-COMPONENTE: GRÁFICO DE CAMPAÑA ---
 const CampaignPerformanceChart = ({ campaignId }: { campaignId: string }) => {
     const [data, setData] = useState<any[]>([]);
     
-    // Función de carga
     const fetchStats = useCallback(async () => {
         const { data: history } = await supabase
             .from('campaign_stats_snapshots')
             .select('recorded_at, total_views')
             .eq('campaign_id', campaignId)
             .order('recorded_at', { ascending: true })
-            .limit(30); // Últimos 30 puntos
+            .limit(30);
 
         if (history && history.length > 0) {
             const formatted = history.map(item => ({
@@ -29,7 +101,6 @@ const CampaignPerformanceChart = ({ campaignId }: { campaignId: string }) => {
                 views: item.total_views
             }));
             
-            // Evitar re-render si es idéntico
             setData(prev => {
                 if (JSON.stringify(prev) !== JSON.stringify(formatted)) return formatted;
                 return prev;
@@ -39,25 +110,16 @@ const CampaignPerformanceChart = ({ campaignId }: { campaignId: string }) => {
 
     useEffect(() => {
         fetchStats();
-
-        // SUSCRIPCIÓN REALTIME
         const channel = supabase.channel(`camp-stats-${campaignId}`)
-            .on('postgres_changes', 
-                { event: 'INSERT', schema: 'public', table: 'campaign_stats_snapshots', filter: `campaign_id=eq.${campaignId}` }, 
-                (payload) => {
-                    console.log("⚡ Campaña: Dato nuevo!", payload.new);
-                    fetchStats(); 
-                }
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaign_stats_snapshots', filter: `campaign_id=eq.${campaignId}` }, 
+                () => fetchStats() 
             )
             .subscribe();
         
-        // POLLING (Respaldo)
         const interval = setInterval(fetchStats, 4000);
-
         return () => { supabase.removeChannel(channel); clearInterval(interval); };
     }, [campaignId, fetchStats]);
 
-    // Si no hay datos (Campaña nueva)
     if (data.length === 0) return (
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 flex flex-col items-center justify-center min-h-[250px]">
             <TrendingUp className="text-gray-200 mb-2" size={48}/>
@@ -82,19 +144,8 @@ const CampaignPerformanceChart = ({ campaignId }: { campaignId: string }) => {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                         <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#9ca3af'}} dy={10} minTickGap={30}/>
-                        <Tooltip 
-                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                            formatter={(value: any) => [value.toLocaleString(), 'Vistas']}
-                        />
-                        <Area 
-                            type="monotone" 
-                            dataKey="views" 
-                            stroke="#8b5cf6" 
-                            strokeWidth={3} 
-                            fillOpacity={1} 
-                            fill="url(#colorViews)" 
-                            isAnimationActive={true}
-                        />
+                        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} formatter={(value: any) => [value.toLocaleString(), 'Vistas']} />
+                        <Area type="monotone" dataKey="views" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorViews)" isAnimationActive={true} />
                     </AreaChart>
                 </ResponsiveContainer>
             </div>
@@ -102,7 +153,7 @@ const CampaignPerformanceChart = ({ campaignId }: { campaignId: string }) => {
     );
 };
 
-// --- SUB-COMPONENTE: TABLA DE INFLUENCERS (SOLO MARCA) ---
+// --- SUB-COMPONENTE: TABLA DE INFLUENCERS ---
 const InfluencersTable = ({ campaignId }: { campaignId: string }) => {
     const [applicants, setApplicants] = useState<any[]>([]);
 
@@ -110,10 +161,7 @@ const InfluencersTable = ({ campaignId }: { campaignId: string }) => {
         const fetchApplicants = async () => {
             const { data } = await supabase
                 .from('applications')
-                .select(`
-                    *,
-                    profiles:influencer_id (full_name, avatar_url, instagram_handle, followers_count)
-                `)
+                .select(`*, profiles:influencer_id (full_name, avatar_url, instagram_handle, followers_count)`)
                 .eq('campaign_id', campaignId);
             if (data) setApplicants(data);
         };
@@ -191,13 +239,9 @@ export default function CampaignDetailPage() {
   const [campaign, setCampaign] = useState<any>(null);
   const [brand, setBrand] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  
-  // Estados de Usuario
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [isProfileComplete, setIsProfileComplete] = useState(false);
-
-  // Estados postulación
   const [applying, setApplying] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
 
@@ -211,7 +255,6 @@ export default function CampaignDetailPage() {
       if (user) {
         setUserId(user.id);
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        
         if (profile) {
             setUserRole(profile.role);
             const hasBasicInfo = profile.avatar_url && profile.bio && profile.phone;
@@ -226,11 +269,7 @@ export default function CampaignDetailPage() {
       }
 
       const { data: campData, error } = await supabase.from('campaigns').select('*').eq('id', id).single();
-
-      if (error || !campData) {
-        setLoading(false);
-        return;
-      }
+      if (error || !campData) { setLoading(false); return; }
       setCampaign(campData);
 
       const { data: brandData } = await supabase.from('profiles').select('full_name, avatar_url, is_verified, city, country').eq('id', campData.brand_id).single();
@@ -244,9 +283,7 @@ export default function CampaignDetailPage() {
   const handleApply = async () => {
     if (!userId || userRole !== 'influencer') return;
     if (!isProfileComplete) return;
-
     if (!confirm('¿Estás seguro de que quieres postular a esta campaña?')) return;
-
     setApplying(true);
     try {
       const { error } = await supabase.from('applications').insert({ campaign_id: id, influencer_id: userId, status: 'pending' });
@@ -271,7 +308,7 @@ export default function CampaignDetailPage() {
         <ArrowLeft size={20} /> Volver
       </Link>
 
-      {/* HEADER DE CAMPAÑA (Común para todos) */}
+      {/* HEADER DE CAMPAÑA */}
       <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100 mb-8 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-orange-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start gap-6">
@@ -293,32 +330,17 @@ export default function CampaignDetailPage() {
           </div>
       </div>
 
-      {/* --- VISTA DE DUEÑO (MARCA) --- */}
       {isOwner ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Columna Izquierda: Gráfico y Detalles */}
+              {/* VISTA MARCA: Gráficos y Tabla */}
               <div className="lg:col-span-2">
                   <CampaignPerformanceChart campaignId={id as string} />
                   <InfluencersTable campaignId={id as string} />
               </div>
-              
-              {/* Columna Derecha: Resumen Rápido */}
               <div className="space-y-6">
-                  <div className="bg-purple-900 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
-                       <div className="relative z-10">
-                           <h3 className="font-bold text-purple-200 mb-4">Estado General</h3>
-                           <div className="space-y-4">
-                               <div className="flex justify-between items-center">
-                                   <span>Vistas Totales</span>
-                                   <span className="font-black text-2xl">28.5K</span>
-                               </div>
-                               <div className="flex justify-between items-center">
-                                   <span>Engagement</span>
-                                   <span className="font-black text-2xl">4.2%</span>
-                               </div>
-                           </div>
-                       </div>
-                  </div>
+                  {/* AQUÍ ESTÁ EL CAMBIO IMPORTANTE: NUEVO COMPONENTE DE STATS */}
+                  <CampaignStatsCard campaignId={id as string} />
+                  
                   <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                       <h3 className="font-bold text-gray-800 mb-4">Descripción</h3>
                       <p className="text-gray-600 text-sm whitespace-pre-line leading-relaxed">{campaign.description}</p>
@@ -326,13 +348,12 @@ export default function CampaignDetailPage() {
               </div>
           </div>
       ) : (
-          /* --- VISTA DE INFLUENCER / PUBLICO --- */
+          /* VISTA INFLUENCER / PUBLICO */
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
                 <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
                     <h3 className="text-xl font-bold text-gray-800 mb-4">Detalles de la Campaña</h3>
                     <p className="text-gray-600 whitespace-pre-line leading-relaxed text-lg">{campaign.description}</p>
-                    
                     {campaign.requirements && (
                         <div className="mt-8">
                             <h4 className="font-bold text-gray-800 mb-3">Requisitos</h4>
@@ -341,7 +362,6 @@ export default function CampaignDetailPage() {
                     )}
                 </div>
             </div>
-
             <div className="lg:col-span-1">
                <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 sticky top-6">
                   <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-100">
@@ -353,7 +373,6 @@ export default function CampaignDetailPage() {
                         <h4 className="font-bold text-gray-800">{brand?.full_name} {brand?.is_verified && '✓'}</h4>
                      </div>
                   </div>
-
                   {userRole === 'influencer' ? (
                     <>
                         {!isProfileComplete ? (
