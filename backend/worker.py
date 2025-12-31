@@ -124,10 +124,53 @@ def record_brand_campaign_stats():
 
     except Exception as e: print(f"❌ Error Stats Marca: {e}")
 
+# --- TAREA 4: ESTADÍSTICAS POR CAMPAÑA (NUEVO) 📈 ---
+def record_campaign_specific_stats():
+    try:
+        # 1. Buscamos campañas que tengan actividad (status 'open' o con aplicaciones completadas)
+        campaigns = supabase.table('campaigns').select('id, title').execute().data
+        
+        if not campaigns: return
+        print("📊 Actualizando métricas de campañas individuales...")
+
+        for camp in campaigns:
+            camp_id = camp['id']
+            
+            # 2. Contamos cuántos influencers han completado trabajo en ESTA campaña
+            completed_apps = supabase.table('applications').select('*', count='exact').eq('campaign_id', camp_id).eq('status', 'completed').execute().count
+            
+            # Si hay gente trabajando, generamos números
+            if completed_apps > 0:
+                # Obtener el último valor para sumar incrementalmente
+                last_stat = supabase.table('campaign_stats_snapshots').select('total_views').eq('campaign_id', camp_id).order('recorded_at', desc=True).limit(1).execute().data
+                current_views = last_stat[0]['total_views'] if last_stat else 0
+                
+                # Simulación: Entre 100 y 500 vistas nuevas por influencer activo en la campaña
+                new_views = current_views + (completed_apps * random.randint(100, 500))
+                new_likes = int(new_views * 0.08) # 8% likes
+
+                supabase.table('campaign_stats_snapshots').insert({
+                    "campaign_id": camp_id,
+                    "total_views": new_views,
+                    "total_likes": new_likes
+                }).execute()
+                
+                print(f"   🔥 Campaña '{camp['title'][:15]}...': {new_views} Vistas")
+            else:
+                # Si nadie ha completado trabajo, insertamos 0 o mantenemos plano para que el gráfico no esté vacío
+                supabase.table('campaign_stats_snapshots').insert({
+                    "campaign_id": camp_id,
+                    "total_views": 0,
+                    "total_likes": 0
+                }).execute()
+
+    except Exception as e: print(f"❌ Error Campaign Stats: {e}")
+
 # --- SCHEDULER ---
 schedule.every(10).seconds.do(process_unverified_users)
 schedule.every(30).seconds.do(record_influencer_stats)
-schedule.every(30).seconds.do(record_brand_campaign_stats) # Ejecutar junto con los influencers
+schedule.every(30).seconds.do(record_brand_campaign_stats) 
+schedule.every(15).seconds.do(record_campaign_specific_stats)
 
 if __name__ == "__main__":
     print("⏱️  Worker V6 corriendo...")

@@ -10,26 +10,68 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-// --- SUB-COMPONENTE: GRÁFICO DE CAMPAÑA (SOLO MARCA) ---
+// --- SUB-COMPONENTE: GRÁFICO DE CAMPAÑA (REALTIME ⚡) ---
 const CampaignPerformanceChart = ({ campaignId }: { campaignId: string }) => {
-    // NOTA: Por ahora simulamos datos para mostrar la UI. 
-    // En el futuro, esto leerá de una tabla "campaign_daily_stats"
-    const data = [
-        { date: 'Día 1', views: 0 },
-        { date: 'Día 2', views: 1200 },
-        { date: 'Día 3', views: 4500 },
-        { date: 'Día 4', views: 8900 },
-        { date: 'Día 5', views: 15200 },
-        { date: 'Día 6', views: 22000 },
-        { date: 'Hoy', views: 28500 },
-    ];
+    const [data, setData] = useState<any[]>([]);
+    
+    // Función de carga
+    const fetchStats = useCallback(async () => {
+        const { data: history } = await supabase
+            .from('campaign_stats_snapshots')
+            .select('recorded_at, total_views')
+            .eq('campaign_id', campaignId)
+            .order('recorded_at', { ascending: true })
+            .limit(30); // Últimos 30 puntos
+
+        if (history && history.length > 0) {
+            const formatted = history.map(item => ({
+                date: new Date(item.recorded_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+                views: item.total_views
+            }));
+            
+            // Evitar re-render si es idéntico
+            setData(prev => {
+                if (JSON.stringify(prev) !== JSON.stringify(formatted)) return formatted;
+                return prev;
+            });
+        }
+    }, [campaignId]);
+
+    useEffect(() => {
+        fetchStats();
+
+        // SUSCRIPCIÓN REALTIME
+        const channel = supabase.channel(`camp-stats-${campaignId}`)
+            .on('postgres_changes', 
+                { event: 'INSERT', schema: 'public', table: 'campaign_stats_snapshots', filter: `campaign_id=eq.${campaignId}` }, 
+                (payload) => {
+                    console.log("⚡ Campaña: Dato nuevo!", payload.new);
+                    fetchStats(); 
+                }
+            )
+            .subscribe();
+        
+        // POLLING (Respaldo)
+        const interval = setInterval(fetchStats, 4000);
+
+        return () => { supabase.removeChannel(channel); clearInterval(interval); };
+    }, [campaignId, fetchStats]);
+
+    // Si no hay datos (Campaña nueva)
+    if (data.length === 0) return (
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 flex flex-col items-center justify-center min-h-[250px]">
+            <TrendingUp className="text-gray-200 mb-2" size={48}/>
+            <p className="text-gray-400 font-medium">Esperando datos de tráfico...</p>
+            <p className="text-xs text-gray-300">El gráfico aparecerá cuando los influencers suban contenido.</p>
+        </div>
+    );
 
     return (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 animate-fade-in">
             <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <TrendingUp className="text-purple-600" size={20}/> Rendimiento de Campaña
+                <TrendingUp className="text-purple-600" size={20}/> Rendimiento en Vivo
             </h3>
-            <div className="h-[200px] w-full">
+            <div className="h-[250px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={data}>
                         <defs>
@@ -39,9 +81,20 @@ const CampaignPerformanceChart = ({ campaignId }: { campaignId: string }) => {
                             </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#9ca3af'}} dy={10}/>
-                        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}/>
-                        <Area type="monotone" dataKey="views" stroke="#8b5cf6" strokeWidth={3} fill="url(#colorViews)" />
+                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#9ca3af'}} dy={10} minTickGap={30}/>
+                        <Tooltip 
+                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                            formatter={(value: any) => [value.toLocaleString(), 'Vistas']}
+                        />
+                        <Area 
+                            type="monotone" 
+                            dataKey="views" 
+                            stroke="#8b5cf6" 
+                            strokeWidth={3} 
+                            fillOpacity={1} 
+                            fill="url(#colorViews)" 
+                            isAnimationActive={true}
+                        />
                     </AreaChart>
                 </ResponsiveContainer>
             </div>
