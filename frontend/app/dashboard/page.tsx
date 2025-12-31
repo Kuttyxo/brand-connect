@@ -7,107 +7,126 @@ import Link from 'next/link';
 import { 
   Users, DollarSign, Briefcase, Star, Zap, Crown, ArrowRight, Plus, 
   Search, Clock, Rocket, Sparkles, AlertCircle, Loader2, TrendingUp,
-  LayoutDashboard
+  LayoutDashboard, Eye, Heart
 } from 'lucide-react'; 
 import BenefitsModal from '@/components/BenefitsModal';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-// --- COMPONENTE DEL GRÁFICO (CON REALTIME + POLLING DE RESPALDO) ---
+// --- COMPONENTE DEL GRÁFICO INTELIGENTE ---
 const GrowthChart = ({ userId, role }: { userId: string, role: string }) => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const isBrand = role === 'brand';
 
-  // Función para descargar datos (reutilizable)
+  // Configuración dinámica según el rol
+  const tableName = isBrand ? 'brand_campaign_stats' : 'stats_snapshots';
+  const dataKey = isBrand ? 'total_views' : 'followers_count'; // Qué columna leemos
+  const label = isBrand ? 'Vistas de Campaña' : 'Seguidores';
+  const color = isBrand ? '#8b5cf6' : '#10B981'; // Morado para Marcas, Verde para Influencers
+  const filterCol = isBrand ? 'brand_id' : 'user_id';
+
   const fetchStats = useCallback(async () => {
       const { data: history } = await supabase
-        .from('stats_snapshots')
-        .select('recorded_at, followers_count')
-        .eq('user_id', userId)
+        .from(tableName)
+        .select(`recorded_at, ${dataKey}`)
+        .eq(filterCol, userId)
         .order('recorded_at', { ascending: true }) 
         .limit(50);
 
       if (history && history.length > 0) {
-        const formattedData = history.map(item => ({
+        const formattedData = history.map((item: any) => ({
             fullDate: item.recorded_at,
             date: new Date(item.recorded_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }), 
-            followers: item.followers_count
+            value: item[dataKey] // Usamos "value" genérico para el gráfico
         }));
-        // Solo actualizamos si hay cambios reales para evitar parpadeos
+        
         setData(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(formattedData)) return formattedData;
             return prev;
         });
       }
       setLoading(false);
-  }, [userId]);
+  }, [userId, tableName, dataKey, filterCol]);
 
   useEffect(() => {
     fetchStats();
 
-    // 1. SUSCRIPCIÓN REALTIME (Plan A: Instantáneo)
     const channel = supabase.channel('chart-updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stats_snapshots', filter: `user_id=eq.${userId}` }, 
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: tableName, filter: `${filterCol}=eq.${userId}` }, 
         (payload) => {
           console.log("⚡ Gráfico: Dato recibido!", payload.new);
-          fetchStats(); // Recargamos limpio para asegurar orden
+          fetchStats(); 
         }
       )
       .subscribe();
 
-    // 2. POLLING (Plan B: Recarga cada 4 segundos por seguridad)
-    const interval = setInterval(() => {
-        fetchStats();
-    }, 4000);
+    const interval = setInterval(fetchStats, 4000);
 
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(interval);
-    };
-  }, [userId, fetchStats]);
+    return () => { supabase.removeChannel(channel); clearInterval(interval); };
+  }, [userId, fetchStats, tableName, filterCol]);
 
   if (loading) return <div className="h-[250px] flex items-center justify-center bg-white rounded-[2rem] mt-6 border border-gray-100"><Loader2 className="animate-spin text-gray-300"/></div>;
 
   if (data.length === 0) return (
     <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 mt-6 text-center">
         <TrendingUp className="mx-auto text-gray-300 mb-2" size={32}/>
-        <p className="text-gray-400">Esperando primeros datos del bot...</p>
+        <p className="text-gray-400">Esperando datos de campañas...</p>
+        {isBrand && <p className="text-xs text-gray-300 mt-1">Se activará cuando cierres tu primer acuerdo.</p>}
     </div>
   );
 
-  const start = data[0].followers;
-  const end = data[data.length - 1].followers;
+  const start = data[0].value;
+  const end = data[data.length - 1].value;
   const growth = end - start;
   
   return (
     <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 mt-6 animate-fade-in relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-green-50 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 opacity-50 pointer-events-none"></div>
+      <div className={`absolute top-0 right-0 w-64 h-64 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 opacity-50 pointer-events-none ${isBrand ? 'bg-purple-100' : 'bg-green-50'}`}></div>
+      
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 relative z-10">
         <div>
           <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <TrendingUp className="text-green-500" size={24} />
-            {role === 'brand' ? 'Alcance Estimado' : 'Crecimiento de Audiencia'}
+            {isBrand ? <Eye className="text-purple-600" size={24}/> : <TrendingUp className="text-green-500" size={24} />}
+            {isBrand ? 'Impacto Total de Campañas' : 'Crecimiento de Audiencia'}
           </h3>
-          <p className="text-sm text-gray-500 mt-1">Datos en tiempo real.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {isBrand ? 'Vistas acumuladas generadas por tus influencers.' : 'Evolución de tu comunidad en tiempo real.'}
+          </p>
         </div>
-        <div className="bg-green-50 px-5 py-3 rounded-2xl text-green-700 text-right self-end sm:self-auto border border-green-100 transition-all duration-500 transform">
-            <p className="text-3xl font-black tracking-tight">{growth > 0 ? '+' : ''}{growth}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-green-600/80">Seguidores Ganados</p>
+        <div className={`px-5 py-3 rounded-2xl text-right self-end sm:self-auto border transition-all duration-500 transform ${isBrand ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-green-50 text-green-700 border-green-100'}`}>
+            <p className="text-3xl font-black tracking-tight">+{growth.toLocaleString()}</p>
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${isBrand ? 'text-purple-600/80' : 'text-green-600/80'}`}>
+                {isBrand ? 'Vistas Nuevas' : 'Seguidores Nuevos'}
+            </p>
         </div>
       </div>
+      
       <div className="h-[250px] w-full relative z-10">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>
-              <linearGradient id="colorFollowers" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10B981" stopOpacity={0.2}/>
-                <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+              <linearGradient id="colorChart" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={color} stopOpacity={0.2}/>
+                <stop offset="95%" stopColor={color} stopOpacity={0}/>
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} dy={10} minTickGap={30} />
             <YAxis domain={['auto', 'auto']} hide />
-            <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', padding: '12px' }} cursor={{ stroke: '#10B981', strokeWidth: 2 }} formatter={(value: any) => [value.toLocaleString(), 'Seguidores']} />
-            <Area type="monotone" dataKey="followers" stroke="#10B981" strokeWidth={4} fillOpacity={1} fill="url(#colorFollowers)" isAnimationActive={true} />
+            <Tooltip 
+                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', padding: '12px' }} 
+                cursor={{ stroke: color, strokeWidth: 2 }} 
+                formatter={(value: any) => [value.toLocaleString(), label]} 
+            />
+            <Area 
+                type="monotone" 
+                dataKey="value" 
+                stroke={color} 
+                strokeWidth={4} 
+                fillOpacity={1} 
+                fill="url(#colorChart)" 
+                isAnimationActive={true} 
+            />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -148,11 +167,9 @@ export default function DashboardPage() {
 
   const fetchDashboardData = useCallback(async (userId: string) => {
     try {
-      // Perfil
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', userId).single();
       if (profileData) setProfile((prev) => (JSON.stringify(prev) !== JSON.stringify(profileData) ? profileData : prev));
 
-      // Stats
       if (profileData?.role === 'brand') {
           const { data: campaigns } = await supabase.from('campaigns').select('id, budget, status').eq('brand_id', userId);
           if (campaigns) {
@@ -184,15 +201,12 @@ export default function DashboardPage() {
     };
     init();
 
-    // SUSCRIPCIÓN GENERAL (Perfiles, Campañas, Aplicaciones)
     const channel = supabase.channel('dashboard-global')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-            console.log("⚡ Perfil actualizado!"); 
             supabase.auth.getUser().then(({data}) => { if(data.user) fetchDashboardData(data.user.id) });
         })
         .subscribe();
 
-    // POLLING GENERAL DE RESPALDO (Cada 4 seg)
     const interval = setInterval(() => {
         supabase.auth.getUser().then(({data}) => { if(data.user) fetchDashboardData(data.user.id) });
     }, 4000);
@@ -297,7 +311,7 @@ export default function DashboardPage() {
           <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all group">
             <div className="flex justify-between mb-6"><h3 className="text-slate-500 font-bold uppercase tracking-wider text-sm">Audiencia</h3><div className="p-3 bg-blue-100 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform"><Users size={24}/></div></div>
             <p className="text-4xl font-black text-[var(--color-brand-dark)]">{profile?.followers_count?.toLocaleString() || 0}</p>
-            <p className="text-sm text-slate-500 font-bold mt-2 flex items-center gap-1">@{profile?.full_name || 'usuario'} {profile?.is_verified && <Sparkles size={14} className="text-blue-500"/>}</p>
+            <p className="text-sm text-slate-500 font-bold mt-2 flex items-center gap-1">@{profile?.social_handle || 'usuario'} {profile?.is_verified && <Sparkles size={14} className="text-blue-500"/>}</p>
           </div>
         </div>
       )}
