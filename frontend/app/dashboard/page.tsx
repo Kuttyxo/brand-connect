@@ -30,11 +30,11 @@ const GrowthChart = ({ userId, role }: { userId: string, role: string }) => {
         .from(tableName)
         .select(`recorded_at, ${dataKey}`)
         .eq(filterCol, userId)
-        .order('recorded_at', { ascending: true }) 
+        .order('recorded_at', { ascending: false }) 
         .limit(50);
 
       if (history && history.length > 0) {
-        const formattedData = history.map((item: any) => ({
+        const formattedData = history.reverse().map((item: any) => ({
             fullDate: item.recorded_at,
             date: new Date(item.recorded_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }), 
             value: item[dataKey] // Usamos "value" genérico para el gráfico
