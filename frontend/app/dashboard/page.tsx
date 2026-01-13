@@ -25,20 +25,35 @@ const GrowthChart = ({ userId, role }: { userId: string, role: string }) => {
   const color = isBrand ? '#8b5cf6' : '#10B981'; // Morado para Marcas, Verde para Influencers
   const filterCol = isBrand ? 'brand_id' : 'user_id';
 
+// --- REEMPLAZA ESTA FUNCIÓN EN app/dashboard/page.tsx ---
+
   const fetchStats = useCallback(async () => {
       const { data: history } = await supabase
         .from(tableName)
         .select(`recorded_at, ${dataKey}`)
         .eq(filterCol, userId)
-        .order('recorded_at', { ascending: false }) 
+        .order('recorded_at', { ascending: false }) // Traemos los más nuevos
         .limit(50);
 
-      if (history && history.length > 0) {
-        const formattedData = history.reverse().map((item: any) => ({
-            fullDate: item.recorded_at,
-            date: new Date(item.recorded_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }), 
-            value: item[dataKey] // Usamos "value" genérico para el gráfico
-        }));
+      if (history && history.length > 0) {        const today = new Date().toDateString();
+
+        const formattedData = history.reverse().map((item: any) => {
+            const dateObj = new Date(item.recorded_at);
+            const isToday = dateObj.toDateString() === today;
+
+            // Lógica inteligente de formato
+            // Si es hoy -> Solo hora (15:30)
+            // Si es antiguo -> Fecha y Hora corta (13/01 15:30)
+            const label = isToday 
+                ? dateObj.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+                : dateObj.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+            return {
+                fullDate: item.recorded_at,
+                date: label, 
+                value: item[dataKey] 
+            };
+        });
         
         setData(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(formattedData)) return formattedData;
@@ -311,7 +326,7 @@ export default function DashboardPage() {
           <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all group">
             <div className="flex justify-between mb-6"><h3 className="text-slate-500 font-bold uppercase tracking-wider text-sm">Audiencia</h3><div className="p-3 bg-blue-100 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform"><Users size={24}/></div></div>
             <p className="text-4xl font-black text-[var(--color-brand-dark)]">{profile?.followers_count?.toLocaleString() || 0}</p>
-            <p className="text-sm text-slate-500 font-bold mt-2 flex items-center gap-1">@{profile?.social_handle || 'usuario'} {profile?.is_verified && <Sparkles size={14} className="text-blue-500"/>}</p>
+            <p className="text-sm text-slate-500 font-bold mt-2 flex items-center gap-1">@{profile?.full_name|| 'usuario'} {profile?.is_verified && <Sparkles size={14} className="text-blue-500"/>}</p>
           </div>
         </div>
       )}
