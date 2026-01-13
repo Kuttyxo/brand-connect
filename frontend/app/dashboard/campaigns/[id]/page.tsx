@@ -200,7 +200,7 @@ const InfluencersTable = ({ campaignId }: { campaignId: string }) => {
                                         </div>
                                         <div>
                                             <p className="font-bold text-gray-800 text-sm">{app.profiles?.full_name}</p>
-                                            <p className="text-xs text-gray-500">@{app.profiles?.instagram_handle || 'usuario'}</p>
+                                            <p className="text-xs text-gray-500">{app.profiles?.instagram_handle || 'usuario'}</p>
                                         </div>
                                     </div>
                                 </td>
