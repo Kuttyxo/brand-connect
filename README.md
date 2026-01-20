@@ -46,8 +46,8 @@
 ### Data Worker (Bot)
 - **Lenguaje:** Python 3
 - **Librerías:** `supabase`, `faker`, `schedule`
-- **Función:** Generación de métricas simuladas y actualizaciones de estado en segundo plano.
-- **Hosting:** Render / Railway
+- **Función:** Generación de métricas simuladas y actualizaciones de estado en segundo plano y aviso de registros de nuevas marcas e influencers.
+- **Hosting:** Railway
 
 ---
 
@@ -85,6 +85,32 @@ pip install supabase schedule faker
 
 # Ejecutar el worker
 python backend/worker.py
+```
+## 📂 Estructura del Proyecto
+
+```bash
+/
+├── backend/                 # Lógica del Worker (Python)
+│   ├── Dockerfile           # Configuración para despliegue (Docker)
+│   ├── requirements.txt     # Dependencias de Python
+│   ├── worker.py            # Script del Bot simulador de datos
+│   └── .env                 # Variables de entorno del backend
+│
+├── frontend/                # Aplicación Web (Next.js)
+│   ├── app/                 # App Router (Rutas y Vistas)
+│   │   ├── admin/           # Panel de Control y Tesorería
+│   │   ├── auth/            # Login y Registro
+│   │   ├── create-campaign/ # Flujo de creación de campañas
+│   │   ├── dashboard/       # Vista principal (Influencer/Marca)
+│   │   ├── globals.css      # Estilos globales
+│   │   ├── layout.tsx       # Layout principal
+│   │   └── page.tsx         # Página de inicio
+│   │
+│   ├── components/          # Componentes UI Reutilizables
+│   ├── lib/                 # Cliente de Supabase y utilidades
+│   ├── public/              # Archivos estáticos
+│   ├── middleware.ts        # Middleware de protección de rutas
+│   └── .env.local           # Variables de entorno
 ```
 
 ## 💳 Flujo de Pago (Escrow)
