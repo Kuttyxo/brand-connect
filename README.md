@@ -114,7 +114,7 @@ python backend/worker.py
 ```
 
 ## 💳 Flujo de Pago (Escrow)
-- **Acuerdo:**La Marca contrata -> Se genera un Agreement (Estado: pending).
+- **Acuerdo:** La Marca contrata -> Se genera un Agreement (Estado: pending).
 
 - **Custodia:** El dinero pasa a estado held en la billetera del Influencer.
 
